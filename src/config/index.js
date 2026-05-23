@@ -4,6 +4,7 @@ dotenv.config();
 module.exports = {
   port: process.env.PORT || 4000,
   mongoUri: process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/lenstalk-os',
+  mongoFallbackUri: process.env.MONGO_FALLBACK_URI || 'mongodb://localhost:27017/lenstalk-os',
   databaseUrl: process.env.DATABASE_URL,
   jwtSecret: process.env.JWT_SECRET || 'LenstalkDemoJwtSecret2026ChangeMe',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',

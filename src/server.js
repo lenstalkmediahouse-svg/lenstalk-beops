@@ -4,14 +4,10 @@ const connectDB = require('./config/db');
 const { scheduleArchiveCleanup } = require('./utils/archiveCleaner');
 
 const startServer = async () => {
-  try {
-    await connectDB();
-    console.log(`✅ Database connected`);
-  } catch (err) {
-    console.warn(`⚠️ Database initialization warning: ${err.message}`);
-  }
+  const dbConn = await connectDB();
+  console.log(`✅ Database connected`);
 
-  // Start 30-day archive auto-delete scheduler
+  // Start 30-day archive auto-delete scheduler after DB is connected.
   try {
     scheduleArchiveCleanup();
   } catch (err) {

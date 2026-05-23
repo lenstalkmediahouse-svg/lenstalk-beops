@@ -5,6 +5,7 @@
  * 2. Employees/Clients where isArchived=true or status='archived' AND archivedAt > 30 days
  */
 
+const mongoose = require('mongoose');
 const getModel = require('../modules/generic/generic.model');
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -30,6 +31,11 @@ const GENERIC_COLLECTIONS = [
 ];
 
 async function runArchiveCleanup() {
+  if (mongoose.connection.readyState !== 1) {
+    console.warn('⚠️ [Archive Cleaner] MongoDB is not connected; skipping cleanup.');
+    return;
+  }
+
   const cutoff = new Date(Date.now() - THIRTY_DAYS_MS);
   let totalDeleted = 0;
 
@@ -58,10 +64,12 @@ async function runArchiveCleanup() {
   try {
     const Employee = require('../modules/employees/employee.model');
     const result = await Employee.deleteMany({
-      $or: [{ isArchived: true }, { status: 'archived' }],
-      $or: [
-        { archivedAt: { $lt: cutoff } },
-        { updatedAt: { $lt: cutoff } },
+      $and: [
+        { $or: [{ isArchived: true }, { status: 'archived' }] },
+        { $or: [
+          { archivedAt: { $lt: cutoff } },
+          { updatedAt: { $lt: cutoff } },
+        ] },
       ],
     });
     if (result.deletedCount > 0) {
@@ -76,10 +84,12 @@ async function runArchiveCleanup() {
   try {
     const Client = require('../modules/clients/client.model');
     const result = await Client.deleteMany({
-      $or: [{ isArchived: true }, { status: 'archived' }],
-      $or: [
-        { archivedAt: { $lt: cutoff } },
-        { updatedAt: { $lt: cutoff } },
+      $and: [
+        { $or: [{ isArchived: true }, { status: 'archived' }] },
+        { $or: [
+          { archivedAt: { $lt: cutoff } },
+          { updatedAt: { $lt: cutoff } },
+        ] },
       ],
     });
     if (result.deletedCount > 0) {
