@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: lenstalk-ops-be
+    runtime: node
+    runtimeVersion: 18
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeployForUpdates: true
+    envVars:
+      - key: NODE_ENV
+        scope: build_and_runtime
+        value: production
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache

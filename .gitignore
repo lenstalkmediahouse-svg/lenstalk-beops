@@ -1,0 +1,90 @@
+# ===========================
+# Dependencies
+# ===========================
+node_modules/
+.pnp
+.pnp.js
+
+# ===========================
+# Environment Variables
+# ===========================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+# Keep the example file
+!.env.example
+
+# ===========================
+# Logs
+# ===========================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===========================
+# Runtime Data
+# ===========================
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# ===========================
+# Build Output
+# ===========================
+dist/
+build/
+out/
+
+# ===========================
+# Cache & Temp Files
+# ===========================
+.cache/
+tmp/
+temp/
+uploads/
+
+# ===========================
+# Testing & Coverage
+# ===========================
+coverage/
+.nyc_output/
+
+# ===========================
+# Editor Directories & Files
+# ===========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.suo
+*~
+
+# ===========================
+# OS Files
+# ===========================
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ===========================
+# Security
+# ===========================
+*.pem
+*.key
+*.cert
+*.p12
+*.pfx
+
+# ===========================
+# Misc Scripts (local only)
+# ===========================
+drop_db.js
+reset_passwords.js
+test_login.js
+patch_*.js
