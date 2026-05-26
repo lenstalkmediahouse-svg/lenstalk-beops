@@ -77,9 +77,9 @@ app.use(compression());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Reject API requests quickly when MongoDB is unavailable
+// Reject API requests quickly when MongoDB is unavailable, but allow health checks through
 app.use((req, res, next) => {
-  if (req.originalUrl.startsWith('/api') && mongoose.connection.readyState !== 1) {
+  if (req.originalUrl.startsWith('/api') && req.originalUrl !== '/api/health' && mongoose.connection.readyState !== 1) {
     return res.status(503).json({ message: 'Service unavailable: database connection not ready. Please try again later.' });
   }
   next();
@@ -87,7 +87,12 @@ app.use((req, res, next) => {
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  const dbConnected = mongoose.connection.readyState === 1;
+  res.json({
+    status: dbConnected ? 'ok' : 'unavailable',
+    databaseReadyState: mongoose.connection.readyState,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 const rateLimit = require('express-rate-limit');
