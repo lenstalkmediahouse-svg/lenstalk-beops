@@ -2,16 +2,38 @@ services:
   - type: web
     name: lenstalk-ops-be
     runtime: node
-    runtimeVersion: 18
+    runtimeVersion: 20
     plan: free
     buildCommand: npm ci --omit=dev
     startCommand: npm start
-    healthCheckPath: /
+    healthCheckPath: /api/health
     autoDeployForUpdates: true
     envVars:
       - key: NODE_ENV
         scope: build_and_runtime
         value: production
+      - key: PORT
+        value: 4000
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 24h
+      - key: COOKIE_NAME
+        value: lenstalk_session
+      - key: COOKIE_SECURE
+        value: true
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
     headers:
       - path: /*
         name: Cache-Control

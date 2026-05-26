@@ -6,16 +6,19 @@ const envMongoUri = process.env.MONGO_URI || process.env.MONGODB_URI || process.
 const defaultMongoUri = isProduction ? undefined : 'mongodb://localhost:27017/lenstalk-os';
 
 module.exports = {
-  port: process.env.PORT || 4000,
+  port: parseInt(process.env.PORT || '4000', 10),
   mongoUri: envMongoUri || defaultMongoUri,
   mongoFallbackUri: process.env.MONGO_FALLBACK_URI || 'mongodb://localhost:27017/lenstalk-os',
   databaseUrl: process.env.DATABASE_URL,
   jwtSecret: process.env.JWT_SECRET || 'LenstalkDemoJwtSecret2026ChangeMe',
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
   nodeEnv: process.env.NODE_ENV || 'development',
-  frontendUrl: process.env.APP_URL || 'https://lenstalk-ops.vercel.app/',
+  // Accepts either APP_URL or FRONTEND_URL — both are supported
+  frontendUrl: process.env.FRONTEND_URL || process.env.APP_URL || 'https://lenstalk-ops.vercel.app',
   cookieName: process.env.COOKIE_NAME || 'lenstalk_session',
   cookieSecure: process.env.COOKIE_SECURE === 'true',
+  emailUser: process.env.EMAIL_USER || '',
+  emailPass: process.env.EMAIL_PASS || '',
   passwords: {
     admin: process.env.DEMO_ADMIN_PASSWORD || 'LenstalkAdmin@2026',
     hr: process.env.DEMO_HR_PASSWORD || 'LenstalkHr@2026',
@@ -26,3 +29,4 @@ module.exports = {
     client: process.env.DEMO_CLIENT_PASSWORD || 'LenstalkClient@2026',
   }
 };
+

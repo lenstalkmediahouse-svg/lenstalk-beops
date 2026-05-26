@@ -44,8 +44,11 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:4173',
   'https://lenstalk-ops.vercel.app',
-  process.env.FRONTEND_URL, // set in .env for production domain
+  config.frontendUrl,           // resolves FRONTEND_URL or APP_URL from env
+  process.env.FRONTEND_URL,     // explicit fallback
+  process.env.APP_URL,          // explicit fallback
 ].filter(Boolean).map(trimTrailingSlash);
+
 const ALLOW_ALL_CORS = process.env.CORS_ALLOW_ALL === 'true';
 const loginCors = cors({
   origin: true,
