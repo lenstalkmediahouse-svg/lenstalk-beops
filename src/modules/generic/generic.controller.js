@@ -6,9 +6,17 @@ exports.getAll = async (req, res) => {
     const Model = getModel(req.params.module);
     
     // HIGH-2 FIX: Backend Brand Isolation for SMM users
+    // Any collection that stores a 'client' field must be listed here
+    // so SMM users can only read records for their assigned brands.
     let query = {};
     if (req.user?.primaryRole === 'smm') {
-      const brandFilteredModules = ['content_tasks', 'lenstalk_reports_v1', 'lenstalk_ads_v1'];
+      const brandFilteredModules = [
+        'content_tasks',           // Content Planner tasks
+        'lenstalk_reports_v1',     // Performance reports
+        'lenstalk_ads_v1',         // Ads data
+        'lenstalk_shoots_v1',      // Shoot scheduler
+        'lenstalk_ops_tasks_v1',   // OPS task manager
+      ];
       if (brandFilteredModules.includes(req.params.module)) {
         query.client = { $in: req.user.assignedBrands || [] };
       }

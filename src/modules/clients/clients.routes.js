@@ -26,6 +26,14 @@ router.get('/', async (req, res) => {
       filter.isArchived = { $ne: true };
     }
 
+    // SMM users only see their assigned brands
+    if (req.user.primaryRole === 'smm') {
+      const assigned = req.user.assignedBrands || [];
+      // Match by name field (the canonical client name used in assignedBrands)
+      filter.name = { $in: assigned };
+      filter.isArchived = { $ne: true };
+    }
+
     const clients = await Client.find(filter).sort({ createdAt: -1 });
     res.json(clients);
   } catch (err) {

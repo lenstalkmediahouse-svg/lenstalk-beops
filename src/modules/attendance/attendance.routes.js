@@ -63,6 +63,20 @@ router.post('/', authenticate, async (req, res) => {
       employeeName: req.body.employeeName || req.user.name,
       createdBy:    req.user._id,
     });
+
+    // ✅ Prevent duplicate attendance entries for the same userId + date (server-side guard)
+    // This blocks duplicates even if frontend loading state is bypassed or API is called directly.
+    const dateStr = req.body.date;
+    if (dateStr && targetUserId) {
+      const existing = await Model.findOne({ userId: targetUserId, date: dateStr });
+      if (existing) {
+        return res.status(409).json({
+          message: 'Attendance already recorded for this date.',
+          existingId: existing._id,
+        });
+      }
+    }
+
     await doc.save();
     res.status(201).json(doc);
   } catch (err) { res.status(400).json({ message: err.message }); }

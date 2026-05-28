@@ -9,13 +9,13 @@ const auditLog = require('../../middleware/auditLogger');
 // Anything not listed here is restricted to admin/super_admin only.
 const COLLECTION_ACCESS = {
   // Shared read-write collections (Ops + Admin)
-  content_tasks:              ['super_admin', 'admin', 'operations_head', 'hr', 'ads_manager_creators', 'employee', 'cinematographer', 'client', 'Operations', 'HR System', 'Ads & Creators'],
+  content_tasks:              ['super_admin', 'admin', 'operations_head', 'hr', 'ads_manager_creators', 'employee', 'cinematographer', 'client', 'smm', 'Operations', 'HR System', 'Ads & Creators'],
   gear_requests:              ['super_admin', 'admin', 'operations_head', 'employee', 'cinematographer', 'Operations', 'Employee Workspace (With My Shoots)'],
-  task_approvals:             ['super_admin', 'admin', 'operations_head', 'hr', 'employee', 'cinematographer', 'Operations', 'HR System'],
+  task_approvals:             ['super_admin', 'admin', 'operations_head', 'hr', 'employee', 'cinematographer', 'smm', 'Operations', 'HR System'],
   shoot_campaigns:            ['super_admin', 'admin', 'operations_head', 'ads_manager_creators', 'client', 'Operations', 'Ads & Creators'],
 
   // Equipment & Shoots
-  lenstalk_shoots_v1:         ['super_admin', 'admin', 'operations_head', 'hr', 'employee', 'cinematographer', 'Operations', 'HR System'],
+  lenstalk_shoots_v1:         ['super_admin', 'admin', 'operations_head', 'hr', 'employee', 'cinematographer', 'smm', 'Operations', 'HR System'],
   lenstalk_equipment_v1:      ['super_admin', 'admin', 'operations_head', 'employee', 'cinematographer', 'Operations'],
 
   // HR Documents (HR + Admin only)
@@ -26,10 +26,10 @@ const COLLECTION_ACCESS = {
   // ── HOLIDAYS ── was missing entirely — caused 403 for ALL non-admin roles
   // Every authenticated role can READ holidays (shown in Attendance calendar)
   // Only HR/Admin can write new holidays (enforced by HR panel UI, not here)
-  lenstalk_holidays_v1:       ['super_admin', 'admin', 'hr', 'operations_head', 'employee', 'cinematographer', 'ads_manager_creators', 'HR System'],
+  lenstalk_holidays_v1:       ['super_admin', 'admin', 'hr', 'operations_head', 'employee', 'cinematographer', 'ads_manager_creators', 'smm', 'HR System'],
 
-  // Ops modules
-  lenstalk_reports_v1:        ['super_admin', 'admin', 'operations_head', 'hr', 'ads_manager_creators', 'client', 'Operations', 'Ads & Creators'],
+  // Ops modules — smm can read reports/tasks for their assigned brands (brand filter applied in controller)
+  lenstalk_reports_v1:        ['super_admin', 'admin', 'operations_head', 'hr', 'ads_manager_creators', 'client', 'smm', 'Operations', 'Ads & Creators'],
   lenstalk_ads_v1:            ['super_admin', 'admin', 'ads_manager_creators', 'client', 'Ads & Creators'],
   lenstalk_influencers_v1:    ['super_admin', 'admin', 'operations_head', 'ads_manager_creators', 'Ads & Creators'],
   lenstalk_influencer_niches_v1: ['super_admin', 'admin', 'operations_head', 'ads_manager_creators', 'Ads & Creators'],
@@ -39,18 +39,18 @@ const COLLECTION_ACCESS = {
   lenstalk_influencer_edits_v1:  ['super_admin', 'admin', 'operations_head', 'ads_manager_creators', 'client', 'Ads & Creators'],
   lenstalk_documents_v2:      ['super_admin', 'admin', 'operations_head', 'hr', 'ads_manager_creators', 'Document Generator'],
 
-  // OPS & Personal Tasks
-  lenstalk_ops_tasks_v1:      ['super_admin', 'admin', 'operations_head', 'hr', 'employee', 'cinematographer', 'ads_manager_creators', 'Operations', 'HR System', 'Employee Workspace (With My Shoots)', 'Employee Workspace (Without My Shoots)', 'Ads & Creators'],
-  lenstalk_personal_tasks_v1: ['super_admin', 'admin', 'operations_head', 'hr', 'employee', 'cinematographer', 'ads_manager_creators', 'Employee Workspace (With My Shoots)', 'Employee Workspace (Without My Shoots)'],
+  // OPS & Personal Tasks — smm can read tasks (brand-filtered in controller)
+  lenstalk_ops_tasks_v1:      ['super_admin', 'admin', 'operations_head', 'hr', 'employee', 'cinematographer', 'ads_manager_creators', 'smm', 'Operations', 'HR System', 'Employee Workspace (With My Shoots)', 'Employee Workspace (Without My Shoots)', 'Ads & Creators'],
+  lenstalk_personal_tasks_v1: ['super_admin', 'admin', 'operations_head', 'hr', 'employee', 'cinematographer', 'ads_manager_creators', 'smm', 'Employee Workspace (With My Shoots)', 'Employee Workspace (Without My Shoots)'],
 
   // Notifications — all authenticated users can read their own
-  lenstalk_notifications_v1:  ['super_admin', 'admin', 'hr', 'operations_head', 'employee', 'cinematographer', 'ads_manager_creators', 'client'],
+  lenstalk_notifications_v1:  ['super_admin', 'admin', 'hr', 'operations_head', 'employee', 'cinematographer', 'ads_manager_creators', 'client', 'smm'],
 
   // Audit Logs — admin/super_admin only (read-only via UI, write via system)
   lenstalk_audit_logs_v1:     ['super_admin', 'admin', 'Admin'],
 
   // Settings — all authenticated roles can read company settings
-  lenstalk_company_settings:  ['super_admin', 'admin', 'hr', 'operations_head', 'employee', 'cinematographer', 'ads_manager', 'ads_creators', 'client'],
+  lenstalk_company_settings:  ['super_admin', 'admin', 'hr', 'operations_head', 'employee', 'cinematographer', 'ads_manager', 'ads_creators', 'client', 'smm'],
 
   // Credentials — admin only (sensitive data)
   lenstalk_credentials_v1:    ['super_admin', 'admin'],
