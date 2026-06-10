@@ -202,6 +202,12 @@ router.put('/:id', authenticate, async (req, res) => {
     user.updatedBy = req.user._id;
 
     await user.save();
+
+    // Sync status change to linked employee if any
+    if (status && user.linkedEmployeeId) {
+      await Employee.findByIdAndUpdate(user.linkedEmployeeId, { status });
+    }
+
     res.json(user.toJSON());
   } catch (error) {
     console.error('Update user error:', error);

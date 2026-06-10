@@ -48,7 +48,7 @@ exports.create = async (req, res) => {
       fullName, email, mobile, roleTitle, department,
       joiningDate, employmentType, grossMonthly,
       leaveCL, leaveSL, leaveEL, leaveCompOff,
-      skills, notes,
+      skills, notes, status,
     } = req.body;
 
     if (!fullName || !email) {
@@ -81,7 +81,7 @@ exports.create = async (req, res) => {
       },
       skills: skills || [],
       notes: notes || '',
-      status: 'active',
+      status: status || 'active',
     });
 
     await employee.save();
@@ -103,7 +103,7 @@ exports.create = async (req, res) => {
         primaryRole: 'employee',
         accessRoles: ['employee'],
         linkedEmployeeId: employee._id,
-        status: 'active',
+        status: employee.status || 'active',
         isActive: true,
         createdBy: req.user._id,
       });
@@ -162,12 +162,15 @@ exports.update = async (req, res) => {
 
     await emp.save();
 
-    // If name or email changed, sync to linked User too
-    if (emp.userId && (fullName || email)) {
-      await User.findByIdAndUpdate(emp.userId, {
-        ...(fullName && { name: fullName.trim() }),
-        ...(email && { email: email.trim().toLowerCase() }),
-      });
+    // If name, email, or status changed, sync to linked User too
+    if (emp.userId) {
+      const userUpdate = {};
+      if (fullName) userUpdate.name = fullName.trim();
+      if (email) userUpdate.email = email.trim().toLowerCase();
+      if (status) userUpdate.status = status;
+      if (Object.keys(userUpdate).length > 0) {
+        await User.findByIdAndUpdate(emp.userId, userUpdate);
+      }
     }
 
     const result = await Employee.findById(emp._id)
@@ -248,6 +251,29 @@ exports.remove = async (req, res) => {
     await Employee.findByIdAndDelete(req.params.id);
     res.json({ message: 'Employee permanently deleted.' });
   } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/**
+ * GET /api/employees/eligible-cinematographers
+ * Returns active employees whose role is cinematographer and who have My Shoot panel access.
+ */
+exports.getEligibleCinematographers = async (req, res) => {
+  try {
+    const users = await User.find({
+      primaryRole: 'cinematographer',
+      status: 'active',
+      accessRoles: { $in: ['Employee Workspace (With My Shoots)'] }
+    }).populate('linkedEmployeeId');
+
+    const eligibleEmployees = users
+      .map(u => u.linkedEmployeeId)
+      .filter(emp => emp && emp.status === 'active' && !emp.isArchived);
+
+    res.json(eligibleEmployees);
+  } catch (err) {
+    console.error('getEligibleCinematographers error:', err);
     res.status(500).json({ message: err.message });
   }
 };

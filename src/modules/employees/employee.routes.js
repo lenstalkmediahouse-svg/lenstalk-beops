@@ -7,6 +7,7 @@ const controller = require('./employee.controller');
 router.use(authenticate);
 
 router.get('/', controller.getAll);
+router.get('/eligible-cinematographers', controller.getEligibleCinematographers);
 router.get('/:id', controller.getById);
 router.post('/', restrictTo('super_admin', 'admin', 'hr'), controller.create);
 router.patch('/:id', restrictTo('super_admin', 'admin', 'hr'), controller.update);
