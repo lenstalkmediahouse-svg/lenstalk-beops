@@ -108,8 +108,13 @@ router.patch('/:id/restore', restrictTo('super_admin', 'admin', 'hr'), async (re
 router.delete('/:id', restrictTo('super_admin', 'admin', 'hr'), async (req, res) => {
   try {
     const Model = Salary();
-    await Model.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Salary slip permanently deleted.' });
+    if (req.query.permanent === 'true') {
+      await Model.findByIdAndDelete(req.params.id);
+      return res.json({ message: 'Salary slip permanently deleted.' });
+    } else {
+      await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() });
+      res.json({ message: 'Salary slip safely archived (Zero Data Loss Policy enforced).' });
+    }
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 

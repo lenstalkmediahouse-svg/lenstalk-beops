@@ -154,8 +154,13 @@ router.patch('/:id/archive', authenticate, restrictTo('super_admin', 'admin', 'h
 router.delete('/:id', authenticate, restrictTo('super_admin', 'admin', 'hr'), async (req, res) => {
   try {
     const Model = Att();
-    await Model.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Record deleted.' });
+    if (req.query.permanent === 'true') {
+      await Model.findByIdAndDelete(req.params.id);
+      return res.json({ message: 'Attendance record permanently deleted.' });
+    } else {
+      await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() });
+      res.json({ message: 'Attendance record safely archived (Zero Data Loss Policy enforced).' });
+    }
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 

@@ -22,7 +22,7 @@ router.get('/content-tasks', authenticate, async (req, res) => {
     const filter = {};
     if (req.query.client) filter.client = req.query.client;
     if (req.query.assignedTo) filter.assignedTo = req.query.assignedTo;
-    const docs = await Model.find(filter).sort({ createdAt: -1 });
+    const docs = await Model.find({ ...filter, isArchived: { $ne: true } }).sort({ createdAt: -1 });
     res.json(docs);
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
@@ -48,8 +48,13 @@ router.patch('/content-tasks/:id', authenticate, async (req, res) => {
 router.delete('/content-tasks/:id', authenticate, async (req, res) => {
   try {
     const Model = getContentTasksModel();
-    await Model.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Content task deleted.' });
+    if (req.query.permanent === 'true') {
+      await Model.findByIdAndDelete(req.params.id);
+      return res.json({ message: 'Content task permanently deleted.' });
+    } else {
+      await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() });
+      res.json({ message: 'Content task safely archived.' });
+    }
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
@@ -59,7 +64,7 @@ router.delete('/content-tasks/:id', authenticate, async (req, res) => {
 router.get('/task-approvals', authenticate, async (req, res) => {
   try {
     const Model = getTaskApprovalsModel();
-    const docs = await Model.find({}).sort({ submittedAt: -1 });
+    const docs = await Model.find({ isArchived: { $ne: true } }).sort({ submittedAt: -1 });
     res.json(docs);
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
@@ -93,8 +98,13 @@ router.patch('/task-approvals/:id', authenticate, async (req, res) => {
 router.delete('/task-approvals/:id', authenticate, async (req, res) => {
   try {
     const Model = getTaskApprovalsModel();
-    await Model.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Task approval deleted.' });
+    if (req.query.permanent === 'true') {
+      await Model.findByIdAndDelete(req.params.id);
+      return res.json({ message: 'Task approval permanently deleted.' });
+    } else {
+      await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() });
+      res.json({ message: 'Task approval safely archived.' });
+    }
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
@@ -106,7 +116,7 @@ router.get('/shoot-campaigns', authenticate, async (req, res) => {
     const Model = getShootCampaignsModel();
     const filter = {};
     if (req.query.shootCode) filter.shootCode = req.query.shootCode;
-    const docs = await Model.find(filter).sort({ createdAt: -1 });
+    const docs = await Model.find({ ...filter, isArchived: { $ne: true } }).sort({ createdAt: -1 });
     res.json(docs);
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
@@ -126,8 +136,12 @@ router.post('/shoot-campaigns/bulk', authenticate, async (req, res) => {
     const Model = getShootCampaignsModel();
     const { shootCode, campaigns } = req.body;
     if (!shootCode) return res.status(400).json({ message: 'shootCode is required.' });
-    // Remove old campaigns for this shoot then insert new ones
-    await Model.deleteMany({ shootCode });
+    // Archive old campaigns for this shoot then insert new ones (Zero Data Loss Policy)
+    if (req.query.permanent === 'true') {
+      await Model.deleteMany({ shootCode });
+    } else {
+      await Model.updateMany({ shootCode }, { isArchived: true, archivedAt: new Date() });
+    }
     if (campaigns && campaigns.length > 0) {
       const inserted = await Model.insertMany(campaigns.map(c => ({ ...c, shootCode })));
       return res.json(inserted);
@@ -148,8 +162,13 @@ router.patch('/shoot-campaigns/:id', authenticate, async (req, res) => {
 router.delete('/shoot-campaigns/:id', authenticate, async (req, res) => {
   try {
     const Model = getShootCampaignsModel();
-    await Model.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Shoot campaign deleted.' });
+    if (req.query.permanent === 'true') {
+      await Model.findByIdAndDelete(req.params.id);
+      return res.json({ message: 'Shoot campaign permanently deleted.' });
+    } else {
+      await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() });
+      res.json({ message: 'Shoot campaign safely archived.' });
+    }
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 

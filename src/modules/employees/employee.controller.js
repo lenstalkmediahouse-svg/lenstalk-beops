@@ -241,15 +241,25 @@ exports.remove = async (req, res) => {
     const emp = await Employee.findById(req.params.id);
     if (!emp) return res.status(404).json({ message: 'Employee not found.' });
 
-    // Delete linked user if present
-    if (emp.userId) {
-      await User.findByIdAndDelete(emp.userId);
-    } else {
-      await User.deleteMany({ linkedEmployeeId: emp._id });
+    if (req.query.permanent === 'true') {
+      if (emp.userId) {
+        await User.findByIdAndDelete(emp.userId);
+      } else {
+        await User.deleteMany({ linkedEmployeeId: emp._id });
+      }
+      await Employee.findByIdAndDelete(req.params.id);
+      return res.json({ message: 'Employee permanently deleted.' });
     }
 
-    await Employee.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Employee permanently deleted.' });
+    // Soft delete linked user if present
+    if (emp.userId) {
+      await User.findByIdAndUpdate(emp.userId, { isActive: false, status: 'inactive' });
+    } else {
+      await User.updateMany({ linkedEmployeeId: emp._id }, { isActive: false, status: 'inactive' });
+    }
+
+    await Employee.findByIdAndUpdate(req.params.id, { isArchived: true, status: 'archived' });
+    res.json({ message: 'Employee safely archived (Zero Data Loss Policy enforced).' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -217,16 +217,20 @@ router.post('/:id/restore', restrictTo('super_admin', 'admin'), async (req, res)
 // Permanently deletes a client and their associated login accounts
 router.delete('/:id', restrictTo('super_admin', 'admin'), async (req, res) => {
   try {
-    const doc = await Client.findByIdAndDelete(req.params.id);
-    if (!doc) return res.status(404).json({ message: 'Client not found.' });
-
-    // Also delete linked users
-    if (doc.userId) {
-      await User.findByIdAndDelete(doc.userId);
+    let doc;
+    if (req.query.permanent === 'true') {
+      doc = await Client.findByIdAndDelete(req.params.id);
+      if (!doc) return res.status(404).json({ message: 'Client not found.' });
+      if (doc.userId) await User.findByIdAndDelete(doc.userId);
+      else await User.deleteMany({ linkedClientId: doc._id });
+      return res.json({ message: 'Client permanently deleted.' });
+    } else {
+      doc = await Client.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() }, { new: true });
+      if (!doc) return res.status(404).json({ message: 'Client not found.' });
+      if (doc.userId) await User.findByIdAndUpdate(doc.userId, { isActive: false, status: 'inactive' });
+      else await User.updateMany({ linkedClientId: doc._id }, { isActive: false, status: 'inactive' });
+      res.json({ message: 'Client safely archived (Zero Data Loss Policy enforced).' });
     }
-    await User.deleteMany({ linkedClientId: doc._id });
-
-    res.json({ message: 'Client permanently deleted.' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

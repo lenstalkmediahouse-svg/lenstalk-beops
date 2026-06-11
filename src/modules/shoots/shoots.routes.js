@@ -53,8 +53,13 @@ router.patch('/:id', authenticate, async (req, res) => {
 router.delete('/:id', restrictTo('super_admin', 'admin', 'operations_head'), async (req, res) => {
   try {
     const Model = Shoots();
-    await Model.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Shoot deleted.' });
+    if (req.query.permanent === 'true') {
+      await Model.findByIdAndDelete(req.params.id);
+      return res.json({ message: 'Shoot permanently deleted.' });
+    } else {
+      await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() });
+      res.json({ message: 'Shoot safely archived (Zero Data Loss Policy enforced).' });
+    }
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 

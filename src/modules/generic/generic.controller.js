@@ -65,9 +65,16 @@ exports.update = async (req, res) => {
 exports.remove = async (req, res) => {
   try {
     const Model = getModel(req.params.module);
-    const doc = await Model.findByIdAndDelete(req.params.id);
-    if (!doc) return res.status(404).json({ message: 'Not found' });
-    res.status(204).send();
+    let doc;
+    if (req.query.permanent === 'true') {
+      doc = await Model.findByIdAndDelete(req.params.id);
+      if (!doc) return res.status(404).json({ message: 'Not found' });
+      return res.status(200).json({ message: 'Item permanently deleted.' });
+    } else {
+      doc = await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date().toISOString() }, { new: true });
+      if (!doc) return res.status(404).json({ message: 'Not found' });
+      res.status(200).json({ message: 'Item safely archived (Zero Data Loss Policy enforced).', data: doc });
+    }
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

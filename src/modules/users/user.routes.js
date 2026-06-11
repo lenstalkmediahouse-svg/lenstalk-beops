@@ -78,6 +78,34 @@ async function syncMissingUsers(adminId) {
       }
     }
 
+    // Sync missing employees (reverse sync: User -> Employee for admin-created staff)
+    const staffUsers = await User.find({ primaryRole: { $ne: 'client' }, isActive: true });
+    const staffIds = staffUsers.filter(u => u.primaryRole !== 'super_admin').map(u => u._id);
+    const existingEmps = await Employee.find({ userId: { $in: staffIds } }).select('userId');
+    const existingEmpUserIds = new Set(existingEmps.map(e => e.userId?.toString()));
+
+    for (const u of staffUsers) {
+      if (u.primaryRole === 'super_admin') continue;
+      if (!existingEmpUserIds.has(u._id.toString())) {
+        if (!u.name) continue;
+        const employee = new Employee({
+          employeeCode: u.loginId,
+          fullName: u.name,
+          email: u.email || `${u.loginId}@lenstalkmedia.com`,
+          mobile: u.mobile || '',
+          roleTitle: u.primaryRole.replace(/_/g, ' '),
+          department: 'Operations',
+          joiningDate: new Date(),
+          employmentType: 'full_time',
+          status: u.status || 'active',
+          userId: u._id
+        });
+        await employee.save();
+        u.linkedEmployeeId = employee._id;
+        await u.save();
+      }
+    }
+
     // Sync missing clients
     const missingClients = await Client.find({ userId: { $exists: false }, isArchived: { $ne: true } });
     for (const client of missingClients) {
@@ -167,6 +195,26 @@ router.post('/', authenticate, async (req, res) => {
     });
 
     await user.save();
+
+    // Auto-create Employee record if it's a staff member (not client)
+    if (primaryRole !== 'client') {
+      const employee = new Employee({
+        employeeCode: loginId,
+        fullName: name,
+        email: email,
+        mobile: '',
+        roleTitle: primaryRole.replace(/_/g, ' '),
+        department: 'Operations',
+        joiningDate: new Date(),
+        employmentType: 'full_time',
+        status: status || 'active',
+        userId: user._id
+      });
+      await employee.save();
+      user.linkedEmployeeId = employee._id;
+      await user.save();
+    }
+
     res.status(201).json(user.toJSON());
   } catch (error) {
     console.error('Create user error:', error);
@@ -224,8 +272,13 @@ router.delete('/:id', authenticate, async (req, res) => {
     if (!['super_admin', 'admin'].includes(req.user.primaryRole)) {
       return res.status(403).json({ message: 'Access denied.' });
     }
-    await User.findByIdAndDelete(req.params.id);
-    res.json({ message: 'User deleted' });
+    if (req.query.permanent === 'true') {
+      await User.findByIdAndDelete(req.params.id);
+      res.json({ message: 'User permanently deleted.' });
+    } else {
+      await User.findByIdAndUpdate(req.params.id, { isActive: false, status: 'inactive' });
+      res.json({ message: 'User safely archived (Zero Data Loss Policy enforced).' });
+    }
   } catch (err) {
     res.status(500).json({ message: 'Server error deleting user.' });
   }

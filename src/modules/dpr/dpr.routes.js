@@ -66,8 +66,13 @@ router.patch('/:id', async (req, res) => {
 router.delete('/:id', restrictTo('super_admin', 'admin', 'hr'), async (req, res) => {
   try {
     const Model = DPR();
-    await Model.findByIdAndDelete(req.params.id);
-    res.json({ message: 'DPR entry deleted.' });
+    if (req.query.permanent === 'true') {
+      await Model.findByIdAndDelete(req.params.id);
+      return res.json({ message: 'DPR permanently deleted.' });
+    } else {
+      await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() });
+      res.json({ message: 'DPR safely archived (Zero Data Loss Policy enforced).' });
+    }
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 

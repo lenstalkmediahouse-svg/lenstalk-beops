@@ -81,8 +81,13 @@ router.patch('/:id/reject', restrictTo('super_admin', 'admin', 'operations_head'
 router.delete('/:id', restrictTo('super_admin', 'admin'), async (req, res) => {
   try {
     const Model = Tasks();
-    await Model.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Task deleted.' });
+    if (req.query.permanent === 'true') {
+      await Model.findByIdAndDelete(req.params.id);
+      return res.json({ message: 'Task permanently deleted.' });
+    } else {
+      await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() });
+      res.json({ message: 'Task safely archived (Zero Data Loss Policy enforced).' });
+    }
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 

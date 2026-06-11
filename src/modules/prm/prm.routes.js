@@ -224,9 +224,16 @@ router.patch('/:id/restore', authenticate, async (req, res) => {
 router.delete('/:id/permanent', authenticate, async (req, res) => {
   try {
     if (!checkAccess(req, res)) return;
-    const record = await PRM.findByIdAndDelete(req.params.id);
-    if (!record) return res.status(404).json({ message: 'Record not found.' });
-    res.json({ message: 'Permanently deleted.', record });
+    let record;
+    if (req.query.permanent === 'true') {
+      record = await PRM.findByIdAndDelete(req.params.id);
+      if (!record) return res.status(404).json({ message: 'Record not found.' });
+      return res.json({ message: 'Record permanently deleted.' });
+    } else {
+      record = await PRM.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() }, { new: true });
+      if (!record) return res.status(404).json({ message: 'Record not found.' });
+      res.json({ message: 'Record safely archived (Zero Data Loss Policy enforced).', record });
+    }
   } catch (err) {
     console.error('PRM permanent delete error:', err);
     res.status(500).json({ message: 'Server error.' });

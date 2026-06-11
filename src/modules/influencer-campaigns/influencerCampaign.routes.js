@@ -218,9 +218,16 @@ router.delete('/:id/permanent', authenticate, async (req, res) => {
     const { primaryRole, role } = req.user || {};
     const isAdmin = primaryRole === 'super_admin' || primaryRole === 'admin' || role === 'super_admin' || role === 'admin';
     if (!isAdmin) return res.status(403).json({ message: 'Only admins can permanently delete campaigns.' });
-    const campaign = await InfluencerCampaign.findByIdAndDelete(req.params.id);
-    if (!campaign) return res.status(404).json({ message: 'Campaign not found.' });
-    res.json({ message: 'Campaign permanently deleted.' });
+    let campaign;
+    if (req.query.permanent === 'true') {
+      campaign = await InfluencerCampaign.findByIdAndDelete(req.params.id);
+      if (!campaign) return res.status(404).json({ message: 'Campaign not found.' });
+      return res.json({ message: 'Campaign permanently deleted.' });
+    } else {
+      campaign = await InfluencerCampaign.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() }, { new: true });
+      if (!campaign) return res.status(404).json({ message: 'Campaign not found.' });
+      res.json({ message: 'Campaign safely archived (Zero Data Loss Policy enforced).' });
+    }
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
