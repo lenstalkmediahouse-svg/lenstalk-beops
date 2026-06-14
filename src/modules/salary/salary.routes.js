@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, restrictTo } = require('../../middleware/auth');
 const getModel = require('../generic/generic.model');
+const auditLog = require('../../middleware/auditLogger');
 
 const Salary = () => getModel('salary_slips');
 
@@ -90,8 +91,8 @@ router.patch('/:id/archive', restrictTo('super_admin', 'admin', 'hr'), async (re
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
-// PATCH /api/salary/:id/restore  — restore from archive
-router.patch('/:id/restore', restrictTo('super_admin', 'admin', 'hr'), async (req, res) => {
+// PATCH /api/salary/:id/restore  — restore from archive — SUPER ADMIN ONLY
+router.patch('/:id/restore', restrictTo('super_admin'), async (req, res) => {
   try {
     const Model = Salary();
     const doc = await Model.findByIdAndUpdate(
@@ -104,15 +105,17 @@ router.patch('/:id/restore', restrictTo('super_admin', 'admin', 'hr'), async (re
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
-// DELETE /api/salary/:id  — permanent delete (super_admin only)
-router.delete('/:id', restrictTo('super_admin', 'admin', 'hr'), async (req, res) => {
+// DELETE /api/salary/:id  — permanent delete — SUPER ADMIN ONLY (via Archive Vault)
+router.delete('/:id', restrictTo('super_admin'), async (req, res) => {
   try {
     const Model = Salary();
     if (req.query.permanent === 'true') {
-      await Model.findByIdAndDelete(req.params.id);
+      const doc = await Model.findByIdAndDelete(req.params.id);
+      auditLog.write({ action: 'DATA_PERM_DELETE', actor: req.user?.name || 'Super Admin', details: `PERMANENT DELETE salary slip | ID: ${req.params.id}`, module: 'HR System', ip: req.ip || '—' });
       return res.json({ message: 'Salary slip permanently deleted.' });
     } else {
       await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() });
+      auditLog.write({ action: 'DATA_ARCHIVE', actor: req.user?.name || 'Unknown', details: `Archived salary slip | ID: ${req.params.id}`, module: 'HR System', ip: req.ip || '—' });
       res.json({ message: 'Salary slip safely archived (Zero Data Loss Policy enforced).' });
     }
   } catch (err) { res.status(500).json({ message: err.message }); }

@@ -88,3 +88,12 @@ drop_db.js
 reset_passwords.js
 test_login.js
 patch_*.js
+backups/
+data_*.js
+forensic_scan.js
+hunt_data.js
+fix_*.js
+relink_*.js
+repair_*.js
+scratch*.js
+test_*.js

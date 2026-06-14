@@ -58,10 +58,10 @@ const COLLECTION_ACCESS = {
   // Archive Vault — admin manages permanently, ops/hr can restore their own
   archive_vault:              ['super_admin', 'admin', 'hr', 'operations_head'],
 
-  // Accounts — Account Logs with Operations Clearance tracking
-  lenstalk_account_logs_v1:   ['super_admin', 'admin', 'operations_head', 'hr', 'accountant', 'Accounts', 'Operations', 'Admin'],
+  // Accounts — PHASE 4: Restricted to Accountant, Admin, Super Admin ONLY
+  lenstalk_account_logs_v1:   ['super_admin', 'admin', 'accountant', 'Accounts', 'Admin', 'Super Admin'],
   // Accounts — Account Slips (project expense sheets)
-  lenstalk_account_slips_v1:  ['super_admin', 'admin', 'operations_head', 'hr', 'accountant', 'Accounts', 'Operations', 'Admin'],
+  lenstalk_account_slips_v1:  ['super_admin', 'admin', 'accountant', 'Accounts', 'Admin', 'Super Admin'],
 };
 
 // H-4 middleware: check that the user's role is allowed for this collection

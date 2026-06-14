@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, restrictTo } = require('../../middleware/auth');
 const getModel = require('../generic/generic.model');
+const auditLog = require('../../middleware/auditLogger');
 
 const DPR = () => getModel('dpr_entries');
 
@@ -12,6 +13,13 @@ router.get('/', async (req, res) => {
     const Model = DPR();
     const filter = {};
     if (req.query.date) filter.date = req.query.date;
+
+    // Default: exclude archived records
+    if (req.query.archived === 'true') {
+      filter.isArchived = true;
+    } else if (req.query.all !== 'true') {
+      filter.isArchived = { $ne: true };
+    }
 
     // scope=personal: force userId filter regardless of role.
     // Used by HR/Operations users accessing their own "My DPR" workspace tab.
@@ -67,10 +75,16 @@ router.delete('/:id', restrictTo('super_admin', 'admin', 'hr'), async (req, res)
   try {
     const Model = DPR();
     if (req.query.permanent === 'true') {
+      // ZERO DATA LOSS — Permanent delete: SUPER ADMIN ONLY
+      if (req.user?.primaryRole !== 'super_admin') {
+        return res.status(403).json({ message: 'Forbidden: Permanent delete restricted to Super Admin only.' });
+      }
       await Model.findByIdAndDelete(req.params.id);
+      auditLog.write({ action: 'DATA_PERM_DELETE', actor: req.user?.name || 'Super Admin', details: `PERMANENT DELETE DPR entry | ID: ${req.params.id}`, module: 'HR System', ip: req.ip || '—' });
       return res.json({ message: 'DPR permanently deleted.' });
     } else {
       await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() });
+      auditLog.write({ action: 'DATA_ARCHIVE', actor: req.user?.name || 'Unknown', details: `Archived DPR entry | ID: ${req.params.id}`, module: 'HR System', ip: req.ip || '—' });
       res.json({ message: 'DPR safely archived (Zero Data Loss Policy enforced).' });
     }
   } catch (err) { res.status(500).json({ message: err.message }); }

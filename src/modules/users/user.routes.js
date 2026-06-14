@@ -269,16 +269,24 @@ router.put('/:id', authenticate, async (req, res) => {
  */
 router.delete('/:id', authenticate, async (req, res) => {
   try {
+    // Permanent delete — SUPER ADMIN ONLY
+    if (req.query.permanent === 'true') {
+      if (req.user?.primaryRole !== 'super_admin') {
+        return res.status(403).json({ message: 'Forbidden: Permanent delete restricted to Super Admin only.' });
+      }
+      const auditLog = require('../../middleware/auditLogger');
+      const user = await User.findByIdAndDelete(req.params.id);
+      auditLog.write({ action: 'DATA_PERM_DELETE', actor: req.user?.name || 'Super Admin', details: `PERMANENT DELETE user | ID: ${req.params.id} | loginId: ${user?.loginId}`, module: 'Access Control', ip: req.ip || '—' });
+      return res.json({ message: 'User permanently deleted.' });
+    }
+    // Soft deactivate — admin or super_admin
     if (!['super_admin', 'admin'].includes(req.user.primaryRole)) {
       return res.status(403).json({ message: 'Access denied.' });
     }
-    if (req.query.permanent === 'true') {
-      await User.findByIdAndDelete(req.params.id);
-      res.json({ message: 'User permanently deleted.' });
-    } else {
-      await User.findByIdAndUpdate(req.params.id, { isActive: false, status: 'inactive' });
-      res.json({ message: 'User safely archived (Zero Data Loss Policy enforced).' });
-    }
+    const auditLog = require('../../middleware/auditLogger');
+    await User.findByIdAndUpdate(req.params.id, { isActive: false, status: 'inactive' });
+    auditLog.write({ action: 'DATA_ARCHIVE', actor: req.user?.name || 'Unknown', details: `Deactivated user | ID: ${req.params.id}`, module: 'Access Control', ip: req.ip || '—' });
+    res.json({ message: 'User safely archived (Zero Data Loss Policy enforced).' });
   } catch (err) {
     res.status(500).json({ message: 'Server error deleting user.' });
   }

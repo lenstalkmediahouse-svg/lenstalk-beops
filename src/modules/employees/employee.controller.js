@@ -1,5 +1,6 @@
 const Employee = require('./employee.model');
 const User = require('../users/user.model');
+const auditLog = require('../../middleware/auditLogger');
 const bcrypt = require('bcryptjs');
 
 /**
@@ -117,6 +118,15 @@ exports.create = async (req, res) => {
     const result = await Employee.findById(employee._id)
       .populate('userId', 'loginId primaryRole accessRoles status');
 
+    // Audit log
+    auditLog.write({
+      action: 'DATA_CREATE',
+      actor: req.user?.name || req.user?.loginId || 'Unknown',
+      details: `Created employee: ${fullName} (${loginId}) | ID: ${employee._id}`,
+      module: 'HR System',
+      ip: req.ip || '—',
+    });
+
     res.status(201).json({
       employee: result,
       user: user ? { loginId: user.loginId, tempPassword } : null,
@@ -175,6 +185,16 @@ exports.update = async (req, res) => {
 
     const result = await Employee.findById(emp._id)
       .populate('userId', 'loginId primaryRole accessRoles status');
+
+    // Audit log
+    auditLog.write({
+      action: 'DATA_UPDATE',
+      actor: req.user?.name || req.user?.loginId || 'Unknown',
+      details: `Updated employee: ${emp.fullName} (${emp.employeeCode}) | ID: ${emp._id}`,
+      module: 'HR System',
+      ip: req.ip || '—',
+    });
+
     res.json(result);
   } catch (err) {
     console.error('Update employee error:', err);
@@ -190,7 +210,7 @@ exports.archive = async (req, res) => {
   try {
     const emp = await Employee.findByIdAndUpdate(
       req.params.id,
-      { status: 'archived', isArchived: true },
+      { status: 'archived', isArchived: true, archivedAt: new Date().toISOString() },
       { new: true }
     );
     if (!emp) return res.status(404).json({ message: 'Employee not found.' });
@@ -199,6 +219,15 @@ exports.archive = async (req, res) => {
     if (emp.userId) {
       await User.findByIdAndUpdate(emp.userId, { isActive: false, status: 'inactive' });
     }
+
+    // Audit log
+    auditLog.write({
+      action: 'DATA_ARCHIVE',
+      actor: req.user?.name || req.user?.loginId || 'Unknown',
+      details: `Archived employee: ${emp.fullName} (${emp.employeeCode}) | ID: ${emp._id}`,
+      module: 'HR System',
+      ip: req.ip || '—',
+    });
 
     res.json({ message: `${emp.fullName} archived successfully.`, employee: emp });
   } catch (err) {
@@ -226,6 +255,15 @@ exports.restore = async (req, res) => {
       await User.updateMany({ linkedEmployeeId: emp._id }, { isActive: true, status: 'active' });
     }
 
+    // Audit log
+    auditLog.write({
+      action: 'DATA_RESTORE',
+      actor: req.user?.name || req.user?.loginId || 'Super Admin',
+      details: `Restored employee: ${emp.fullName} (${emp.employeeCode}) | ID: ${emp._id}`,
+      module: 'HR System',
+      ip: req.ip || '—',
+    });
+
     res.json({ message: `${emp.fullName} restored successfully.`, employee: emp });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -242,12 +280,26 @@ exports.remove = async (req, res) => {
     if (!emp) return res.status(404).json({ message: 'Employee not found.' });
 
     if (req.query.permanent === 'true') {
+      // ZERO DATA LOSS — Permanent delete: SUPER ADMIN ONLY
+      if (req.user?.primaryRole !== 'super_admin') {
+        return res.status(403).json({
+          message: 'Forbidden: Permanent delete is restricted to Super Admin only via Archive Vault.'
+        });
+      }
       if (emp.userId) {
         await User.findByIdAndDelete(emp.userId);
       } else {
         await User.deleteMany({ linkedEmployeeId: emp._id });
       }
       await Employee.findByIdAndDelete(req.params.id);
+
+      auditLog.write({
+        action: 'DATA_PERM_DELETE',
+        actor: req.user?.name || req.user?.loginId || 'Super Admin',
+        details: `PERMANENT DELETE employee: ${emp.fullName} (${emp.employeeCode}) | ID: ${emp._id}`,
+        module: 'HR System',
+        ip: req.ip || '—',
+      });
       return res.json({ message: 'Employee permanently deleted.' });
     }
 
@@ -258,7 +310,16 @@ exports.remove = async (req, res) => {
       await User.updateMany({ linkedEmployeeId: emp._id }, { isActive: false, status: 'inactive' });
     }
 
-    await Employee.findByIdAndUpdate(req.params.id, { isArchived: true, status: 'archived' });
+    await Employee.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date().toISOString(), status: 'archived' });
+
+    auditLog.write({
+      action: 'DATA_ARCHIVE',
+      actor: req.user?.name || req.user?.loginId || 'Unknown',
+      details: `Archived employee: ${emp.fullName} (${emp.employeeCode}) | ID: ${emp._id}`,
+      module: 'HR System',
+      ip: req.ip || '—',
+    });
+
     res.json({ message: 'Employee safely archived (Zero Data Loss Policy enforced).' });
   } catch (err) {
     res.status(500).json({ message: err.message });

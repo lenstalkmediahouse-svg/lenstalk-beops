@@ -4,6 +4,7 @@ const router = express.Router();
 const InfluencerCampaign = require('./influencerCampaign.model');
 const { authenticate, restrictTo } = require('../../middleware/auth');
 const getGenericModel = require('../generic/generic.model');
+const auditLog = require('../../middleware/auditLogger');
 
 // Rate limiter for public registration (5 per hour per IP)
 const registerLimiter = rateLimit({
@@ -197,8 +198,8 @@ router.delete('/:id', authenticate, async (req, res) => {
   }
 });
 
-// ─── AUTHENTICATED: Restore archived campaign ──────────────────────────────
-router.patch('/:id/restore', authenticate, async (req, res) => {
+// ─── AUTHENTICATED: Restore archived campaign — SUPER ADMIN ONLY ─────────────
+router.patch('/:id/restore', authenticate, restrictTo('super_admin'), async (req, res) => {
   try {
     const campaign = await InfluencerCampaign.findByIdAndUpdate(
       req.params.id,
@@ -206,26 +207,50 @@ router.patch('/:id/restore', authenticate, async (req, res) => {
       { new: true }
     );
     if (!campaign) return res.status(404).json({ message: 'Campaign not found.' });
+
+    auditLog.write({
+      action: 'DATA_RESTORE',
+      actor: req.user?.name || 'Super Admin',
+      details: `Restored influencer campaign: ${campaign.campaignName} | ID: ${campaign._id}`,
+      module: 'Ads & Creators',
+      ip: req.ip || '—',
+    });
+
     res.json({ message: 'Campaign restored successfully.', data: campaign });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// ─── AUTHENTICATED: Permanent delete campaign (Admin/Super Admin only) ────────
-router.delete('/:id/permanent', authenticate, async (req, res) => {
+// ─── AUTHENTICATED: Permanent delete campaign — SUPER ADMIN ONLY ─────────────
+router.delete('/:id/permanent', authenticate, restrictTo('super_admin'), async (req, res) => {
   try {
-    const { primaryRole, role } = req.user || {};
-    const isAdmin = primaryRole === 'super_admin' || primaryRole === 'admin' || role === 'super_admin' || role === 'admin';
-    if (!isAdmin) return res.status(403).json({ message: 'Only admins can permanently delete campaigns.' });
     let campaign;
     if (req.query.permanent === 'true') {
       campaign = await InfluencerCampaign.findByIdAndDelete(req.params.id);
       if (!campaign) return res.status(404).json({ message: 'Campaign not found.' });
+
+      auditLog.write({
+        action: 'DATA_PERM_DELETE',
+        actor: req.user?.name || 'Super Admin',
+        details: `PERMANENT DELETE influencer campaign: ${campaign.campaignName} | ID: ${campaign._id}`,
+        module: 'Ads & Creators',
+        ip: req.ip || '—',
+      });
+
       return res.json({ message: 'Campaign permanently deleted.' });
     } else {
       campaign = await InfluencerCampaign.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() }, { new: true });
       if (!campaign) return res.status(404).json({ message: 'Campaign not found.' });
+
+      auditLog.write({
+        action: 'DATA_ARCHIVE',
+        actor: req.user?.name || 'Unknown',
+        details: `Archived influencer campaign: ${campaign.campaignName} | ID: ${campaign._id}`,
+        module: 'Ads & Creators',
+        ip: req.ip || '—',
+      });
+
       res.json({ message: 'Campaign safely archived (Zero Data Loss Policy enforced).' });
     }
   } catch (err) {

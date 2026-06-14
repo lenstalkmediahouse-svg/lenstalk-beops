@@ -14,6 +14,13 @@ router.get('/', async (req, res) => {
     const filter = {};
     if (req.query.status) filter.status = req.query.status;
     if (req.query.clientId) filter.clientId = req.query.clientId;
+
+    // Default: exclude archived records
+    if (req.query.archived === 'true') {
+      filter.isArchived = true;
+    } else if (req.query.all !== 'true') {
+      filter.isArchived = { $ne: true };
+    }
     // Cinematographers/employees only see shoots assigned to them
     if (['cinematographer', 'employee'].includes(req.user.primaryRole)) {
       filter['assignedTo'] = req.user._id.toString();
@@ -54,6 +61,10 @@ router.delete('/:id', restrictTo('super_admin', 'admin', 'operations_head'), asy
   try {
     const Model = Shoots();
     if (req.query.permanent === 'true') {
+      // Permanent delete — SUPER ADMIN ONLY
+      if (req.user?.primaryRole !== 'super_admin') {
+        return res.status(403).json({ message: 'Forbidden: Permanent delete is restricted to Super Admin only.' });
+      }
       await Model.findByIdAndDelete(req.params.id);
       return res.json({ message: 'Shoot permanently deleted.' });
     } else {

@@ -155,6 +155,10 @@ router.delete('/:id', authenticate, restrictTo('super_admin', 'admin', 'hr'), as
   try {
     const Model = Att();
     if (req.query.permanent === 'true') {
+      // Permanent delete — SUPER ADMIN ONLY
+      if (req.user?.primaryRole !== 'super_admin') {
+        return res.status(403).json({ message: 'Forbidden: Permanent delete is restricted to Super Admin only.' });
+      }
       await Model.findByIdAndDelete(req.params.id);
       return res.json({ message: 'Attendance record permanently deleted.' });
     } else {

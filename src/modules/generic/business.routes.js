@@ -5,8 +5,9 @@
  */
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../../middleware/auth');
+const { authenticate, restrictTo } = require('../../middleware/auth');
 const getModel = require('../generic/generic.model');
+const auditLog = require('../../middleware/auditLogger');
 
 // ── Helper to get models ──
 const getContentTasksModel  = () => getModel('content_tasks');
@@ -49,10 +50,16 @@ router.delete('/content-tasks/:id', authenticate, async (req, res) => {
   try {
     const Model = getContentTasksModel();
     if (req.query.permanent === 'true') {
+      // ZERO DATA LOSS — Permanent delete: SUPER ADMIN ONLY
+      if (req.user?.primaryRole !== 'super_admin') {
+        return res.status(403).json({ message: 'Forbidden: Permanent delete restricted to Super Admin only.' });
+      }
       await Model.findByIdAndDelete(req.params.id);
+      auditLog.write({ action: 'DATA_PERM_DELETE', actor: req.user?.name || 'Super Admin', details: `PERMANENT DELETE content task | ID: ${req.params.id}`, module: 'Content Planner', ip: req.ip || '—' });
       return res.json({ message: 'Content task permanently deleted.' });
     } else {
       await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() });
+      auditLog.write({ action: 'DATA_ARCHIVE', actor: req.user?.name || 'Unknown', details: `Archived content task | ID: ${req.params.id}`, module: 'Content Planner', ip: req.ip || '—' });
       res.json({ message: 'Content task safely archived.' });
     }
   } catch (err) { res.status(500).json({ message: err.message }); }
@@ -99,10 +106,16 @@ router.delete('/task-approvals/:id', authenticate, async (req, res) => {
   try {
     const Model = getTaskApprovalsModel();
     if (req.query.permanent === 'true') {
+      // ZERO DATA LOSS — Permanent delete: SUPER ADMIN ONLY
+      if (req.user?.primaryRole !== 'super_admin') {
+        return res.status(403).json({ message: 'Forbidden: Permanent delete restricted to Super Admin only.' });
+      }
       await Model.findByIdAndDelete(req.params.id);
+      auditLog.write({ action: 'DATA_PERM_DELETE', actor: req.user?.name || 'Super Admin', details: `PERMANENT DELETE task approval | ID: ${req.params.id}`, module: 'Operations', ip: req.ip || '—' });
       return res.json({ message: 'Task approval permanently deleted.' });
     } else {
       await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() });
+      auditLog.write({ action: 'DATA_ARCHIVE', actor: req.user?.name || 'Unknown', details: `Archived task approval | ID: ${req.params.id}`, module: 'Operations', ip: req.ip || '—' });
       res.json({ message: 'Task approval safely archived.' });
     }
   } catch (err) { res.status(500).json({ message: err.message }); }
@@ -131,17 +144,13 @@ router.post('/shoot-campaigns', authenticate, async (req, res) => {
 });
 
 router.post('/shoot-campaigns/bulk', authenticate, async (req, res) => {
-  // Bulk upsert campaigns for a shoot (used when saving a shoot with influencers)
+  // Bulk upsert campaigns for a shoot. Always archives old then inserts new — never hard-deletes.
   try {
     const Model = getShootCampaignsModel();
     const { shootCode, campaigns } = req.body;
     if (!shootCode) return res.status(400).json({ message: 'shootCode is required.' });
-    // Archive old campaigns for this shoot then insert new ones (Zero Data Loss Policy)
-    if (req.query.permanent === 'true') {
-      await Model.deleteMany({ shootCode });
-    } else {
-      await Model.updateMany({ shootCode }, { isArchived: true, archivedAt: new Date() });
-    }
+    // Zero Data Loss: always soft-archive old campaigns, never hard-delete
+    await Model.updateMany({ shootCode }, { isArchived: true, archivedAt: new Date() });
     if (campaigns && campaigns.length > 0) {
       const inserted = await Model.insertMany(campaigns.map(c => ({ ...c, shootCode })));
       return res.json(inserted);
@@ -163,10 +172,16 @@ router.delete('/shoot-campaigns/:id', authenticate, async (req, res) => {
   try {
     const Model = getShootCampaignsModel();
     if (req.query.permanent === 'true') {
+      // ZERO DATA LOSS — Permanent delete: SUPER ADMIN ONLY
+      if (req.user?.primaryRole !== 'super_admin') {
+        return res.status(403).json({ message: 'Forbidden: Permanent delete restricted to Super Admin only.' });
+      }
       await Model.findByIdAndDelete(req.params.id);
+      auditLog.write({ action: 'DATA_PERM_DELETE', actor: req.user?.name || 'Super Admin', details: `PERMANENT DELETE shoot campaign | ID: ${req.params.id}`, module: 'Operations', ip: req.ip || '—' });
       return res.json({ message: 'Shoot campaign permanently deleted.' });
     } else {
       await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() });
+      auditLog.write({ action: 'DATA_ARCHIVE', actor: req.user?.name || 'Unknown', details: `Archived shoot campaign | ID: ${req.params.id}`, module: 'Operations', ip: req.ip || '—' });
       res.json({ message: 'Shoot campaign safely archived.' });
     }
   } catch (err) { res.status(500).json({ message: err.message }); }

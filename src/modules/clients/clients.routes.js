@@ -191,8 +191,8 @@ router.post('/:id/archive', restrictTo('super_admin', 'admin'), async (req, res)
 });
 
 // ── POST /api/clients/:id/restore ─────────────────────────────────────────────
-// Restores an archived client and re-activates their login
-router.post('/:id/restore', restrictTo('super_admin', 'admin'), async (req, res) => {
+// Restores an archived client — SUPER ADMIN ONLY
+router.post('/:id/restore', restrictTo('super_admin'), async (req, res) => {
   try {
     const doc = await Client.findByIdAndUpdate(
       req.params.id,
@@ -214,8 +214,8 @@ router.post('/:id/restore', restrictTo('super_admin', 'admin'), async (req, res)
 });
 
 // ── DELETE /api/clients/:id ───────────────────────────────────────────────────
-// Permanently deletes a client and their associated login accounts
-router.delete('/:id', restrictTo('super_admin', 'admin'), async (req, res) => {
+// Permanently deletes a client — SUPER ADMIN ONLY (via Archive Vault)
+router.delete('/:id', restrictTo('super_admin'), async (req, res) => {
   try {
     let doc;
     if (req.query.permanent === 'true') {

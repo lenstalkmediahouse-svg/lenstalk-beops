@@ -199,11 +199,13 @@ router.delete('/:id', authenticate, async (req, res) => {
 
 /**
  * PATCH /api/prm/:id/restore
- * Restore an archived PRM record
+ * Restore an archived PRM record — SUPER ADMIN ONLY
  */
 router.patch('/:id/restore', authenticate, async (req, res) => {
   try {
-    if (!checkAccess(req, res)) return;
+    if (req.user?.primaryRole !== 'super_admin') {
+      return res.status(403).json({ message: 'Forbidden: Restore is restricted to Super Admin only.' });
+    }
     const record = await PRM.findByIdAndUpdate(
       req.params.id,
       { isArchived: false },
@@ -219,21 +221,18 @@ router.patch('/:id/restore', authenticate, async (req, res) => {
 
 /**
  * DELETE /api/prm/:id/permanent
- * Permanently delete a PRM record
+ * Permanently delete a PRM record — SUPER ADMIN ONLY
  */
 router.delete('/:id/permanent', authenticate, async (req, res) => {
   try {
-    if (!checkAccess(req, res)) return;
-    let record;
-    if (req.query.permanent === 'true') {
-      record = await PRM.findByIdAndDelete(req.params.id);
-      if (!record) return res.status(404).json({ message: 'Record not found.' });
-      return res.json({ message: 'Record permanently deleted.' });
-    } else {
-      record = await PRM.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() }, { new: true });
-      if (!record) return res.status(404).json({ message: 'Record not found.' });
-      res.json({ message: 'Record safely archived (Zero Data Loss Policy enforced).', record });
+    if (req.user?.primaryRole !== 'super_admin') {
+      return res.status(403).json({ message: 'Forbidden: Permanent delete is restricted to Super Admin only.' });
     }
+    const record = await PRM.findByIdAndDelete(req.params.id);
+    if (!record) return res.status(404).json({ message: 'Record not found.' });
+    const auditLog = require('../../middleware/auditLogger');
+    auditLog.write({ action: 'DATA_PERM_DELETE', actor: req.user?.name || 'Super Admin', details: `PERMANENT DELETE PRM record | ID: ${req.params.id}`, module: 'PRM Registry', ip: req.ip || '—' });
+    res.json({ message: 'Record permanently deleted.' });
   } catch (err) {
     console.error('PRM permanent delete error:', err);
     res.status(500).json({ message: 'Server error.' });

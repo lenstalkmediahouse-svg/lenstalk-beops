@@ -6,7 +6,11 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "backup": "node backup.js",
+    "backup:list": "node backup.js --list",
+    "backup:setup": "node setup-auto-backup.js",
+    "backup:remove": "node setup-auto-backup.js --remove"
   },
   "keywords": [],
   "author": "",
