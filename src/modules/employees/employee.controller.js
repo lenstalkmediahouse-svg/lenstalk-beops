@@ -2,6 +2,7 @@ const Employee = require('./employee.model');
 const User = require('../users/user.model');
 const auditLog = require('../../middleware/auditLogger');
 const bcrypt = require('bcryptjs');
+const getModel = require('../generic/generic.model');
 
 /**
  * GET /api/employees
@@ -220,6 +221,16 @@ exports.archive = async (req, res) => {
       await User.findByIdAndUpdate(emp.userId, { isActive: false, status: 'inactive' });
     }
 
+    // ── Cascading Soft-Archive for related documents and leaves ──
+    await getModel('lenstalk_hr_documents_v1').updateMany(
+      { employeeId: emp._id.toString(), isArchived: { $ne: true } },
+      { isArchived: true, archivedAt: new Date().toISOString(), archiveReason: 'Cascade: Employee archived' }
+    );
+    await getModel('leave_requests').updateMany(
+      { employeeId: emp._id.toString(), isArchived: { $ne: true } },
+      { isArchived: true, archivedAt: new Date().toISOString(), archiveReason: 'Cascade: Employee archived' }
+    );
+
     // Audit log
     auditLog.write({
       action: 'DATA_ARCHIVE',
@@ -254,6 +265,16 @@ exports.restore = async (req, res) => {
     } else {
       await User.updateMany({ linkedEmployeeId: emp._id }, { isActive: true, status: 'active' });
     }
+
+    // ── Cascading Restore for related documents and leaves ──
+    await getModel('lenstalk_hr_documents_v1').updateMany(
+      { employeeId: emp._id.toString(), archiveReason: 'Cascade: Employee archived' },
+      { isArchived: false, $unset: { archivedAt: 1, archiveReason: 1 } }
+    );
+    await getModel('leave_requests').updateMany(
+      { employeeId: emp._id.toString(), archiveReason: 'Cascade: Employee archived' },
+      { isArchived: false, $unset: { archivedAt: 1, archiveReason: 1 } }
+    );
 
     // Audit log
     auditLog.write({

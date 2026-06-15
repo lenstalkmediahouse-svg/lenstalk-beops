@@ -111,4 +111,26 @@ router.patch('/:id/reject', restrictTo('super_admin', 'admin', 'hr'), auditLog('
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
+// DELETE /api/leaves/:id — soft-archive or permanent delete (super_admin only)
+router.delete('/:id', restrictTo('super_admin', 'admin', 'hr'), async (req, res) => {
+  try {
+    const Model = Leaves();
+    if (req.query.permanent === 'true') {
+      // ZERO DATA LOSS — Permanent delete: SUPER ADMIN ONLY
+      if (req.user?.primaryRole !== 'super_admin') {
+        return res.status(403).json({ message: 'Forbidden: Permanent delete is restricted to Super Admin only.' });
+      }
+      const doc = await Model.findByIdAndDelete(req.params.id);
+      if (!doc) return res.status(404).json({ message: 'Leave not found.' });
+      auditLog.write({ action: 'DATA_PERM_DELETE', actor: req.user?.name || 'Super Admin', details: `PERMANENT DELETE leave request | ID: ${req.params.id}`, module: 'HR System', ip: req.ip || '—' });
+      return res.json({ message: 'Leave request permanently deleted.' });
+    } else {
+      const doc = await Model.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() }, { new: true });
+      if (!doc) return res.status(404).json({ message: 'Leave not found.' });
+      auditLog.write({ action: 'DATA_ARCHIVE', actor: req.user?.name || 'Unknown', details: `Archived leave request | ID: ${req.params.id}`, module: 'HR System', ip: req.ip || '—' });
+      res.json({ message: 'Leave request safely archived (Zero Data Loss Policy enforced).' });
+    }
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
 module.exports = router;

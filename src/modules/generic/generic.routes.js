@@ -23,6 +23,10 @@ const COLLECTION_ACCESS = {
   lenstalk_freelancers_v1:    ['super_admin', 'admin', 'hr', 'operations_head', 'HR System', 'Operations'],
   lenstalk_hiring_v1:         ['super_admin', 'admin', 'hr', 'HR System'],
 
+  // DPR & Leave Request collections — used by Archive Vault (HR/Admin only)
+  dpr_entries:                ['super_admin', 'admin', 'hr', 'operations_head', 'HR System'],
+  leave_requests:             ['super_admin', 'admin', 'hr', 'operations_head', 'HR System'],
+
   // ── HOLIDAYS ── was missing entirely — caused 403 for ALL non-admin roles
   // Every authenticated role can READ holidays (shown in Attendance calendar)
   // Only HR/Admin can write new holidays (enforced by HR panel UI, not here)

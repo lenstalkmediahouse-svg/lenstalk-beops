@@ -29,6 +29,8 @@ const prmRoutes        = require('./modules/prm/prm.routes');
 const candidatesRoutes = require('./modules/candidates/candidates.routes');
 // Influencer Campaigns Module (Link-based campaign registration)
 const influencerCampaignRoutes = require('./modules/influencer-campaigns/influencerCampaign.routes');
+// Data Integrity / Health check Module (Super Admin only)
+const integrityRoutes = require('./modules/integrity/integrity.routes');
 
 const app = express();
 
@@ -127,6 +129,7 @@ app.use('/api',                       businessRoutes);
 app.use('/api/prm',                   prmRoutes);
 app.use('/api/candidates',            candidatesRoutes);
 app.use('/api/data',                  genericRoutes); // Generic router for misc schemaless data
+app.use('/api/integrity',             integrityRoutes); // Data integrity health checks (Super Admin only)
 
 // ── Public: Influencer Self-Registration (no auth required) ──────────────────
 const getGenericModel = require('./modules/generic/generic.model');

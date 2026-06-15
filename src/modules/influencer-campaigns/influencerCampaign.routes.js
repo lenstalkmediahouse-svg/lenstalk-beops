@@ -183,16 +183,42 @@ router.patch('/:id/registrations/:regId', authenticate, async (req, res) => {
   }
 });
 
-// ─── AUTHENTICATED: Archive (soft delete) campaign ────────────────────────────
+// ─── AUTHENTICATED: Soft-archive or permanently delete campaign ─────────────────
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    const campaign = await InfluencerCampaign.findByIdAndUpdate(
-      req.params.id,
-      { isArchived: true, archivedAt: new Date() },
-      { new: true }
-    );
-    if (!campaign) return res.status(404).json({ message: 'Campaign not found.' });
-    res.json({ message: 'Campaign archived successfully.' });
+    if (req.query.permanent === 'true') {
+      // ZERO DATA LOSS — Permanent delete: SUPER ADMIN ONLY
+      if (req.user?.primaryRole !== 'super_admin') {
+        return res.status(403).json({ message: 'Forbidden: Permanent delete is restricted to Super Admin only.' });
+      }
+      const campaign = await InfluencerCampaign.findByIdAndDelete(req.params.id);
+      if (!campaign) return res.status(404).json({ message: 'Campaign not found.' });
+
+      auditLog.write({
+        action: 'DATA_PERM_DELETE',
+        actor: req.user?.name || 'Super Admin',
+        details: `PERMANENT DELETE influencer campaign: ${campaign.campaignName} | ID: ${campaign._id}`,
+        module: 'Ads & Creators',
+        ip: req.ip || '—',
+      });
+      return res.json({ message: 'Campaign permanently deleted.' });
+    } else {
+      const campaign = await InfluencerCampaign.findByIdAndUpdate(
+        req.params.id,
+        { isArchived: true, archivedAt: new Date() },
+        { new: true }
+      );
+      if (!campaign) return res.status(404).json({ message: 'Campaign not found.' });
+
+      auditLog.write({
+        action: 'DATA_ARCHIVE',
+        actor: req.user?.name || 'Unknown',
+        details: `Archived influencer campaign: ${campaign.campaignName} | ID: ${campaign._id}`,
+        module: 'Ads & Creators',
+        ip: req.ip || '—',
+      });
+      res.json({ message: 'Campaign safely archived (Zero Data Loss Policy enforced).' });
+    }
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

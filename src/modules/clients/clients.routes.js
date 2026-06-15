@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticate, restrictTo } = require('../../middleware/auth');
 const Client = require('./client.model');
 const User = require('../users/user.model');
+const getModel = require('../generic/generic.model');
 
 router.use(authenticate);
 
@@ -184,6 +185,21 @@ router.post('/:id/archive', restrictTo('super_admin', 'admin'), async (req, res)
       );
     }
 
+    // ── Cascading Soft-Archive for related generic records ──
+    const clientNameRegex = new RegExp('^' + doc.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i');
+    await getModel('content_tasks').updateMany(
+      { client: clientNameRegex, isArchived: { $ne: true } },
+      { isArchived: true, archivedAt: new Date(), archivedReason: 'Cascade: Client archived' }
+    );
+    await getModel('lenstalk_shoots_v1').updateMany(
+      { client: clientNameRegex, isArchived: { $ne: true } },
+      { isArchived: true, archivedAt: new Date(), archivedReason: 'Cascade: Client archived' }
+    );
+    await getModel('lenstalk_influencer_edits_v1').updateMany(
+      { client: clientNameRegex, isArchived: { $ne: true } },
+      { isArchived: true, archivedAt: new Date(), archivedReason: 'Cascade: Client archived' }
+    );
+
     res.json({ message: `${doc.name} archived successfully.`, client: doc });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -207,6 +223,21 @@ router.post('/:id/restore', restrictTo('super_admin'), async (req, res) => {
       { isActive: true, status: 'active' }
     );
 
+    // ── Cascading Restore for related generic records ──
+    const clientNameRegex = new RegExp('^' + doc.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i');
+    await getModel('content_tasks').updateMany(
+      { client: clientNameRegex, archivedReason: 'Cascade: Client archived' },
+      { isArchived: false, $unset: { archivedAt: 1, archivedReason: 1 } }
+    );
+    await getModel('lenstalk_shoots_v1').updateMany(
+      { client: clientNameRegex, archivedReason: 'Cascade: Client archived' },
+      { isArchived: false, $unset: { archivedAt: 1, archivedReason: 1 } }
+    );
+    await getModel('lenstalk_influencer_edits_v1').updateMany(
+      { client: clientNameRegex, archivedReason: 'Cascade: Client archived' },
+      { isArchived: false, $unset: { archivedAt: 1, archivedReason: 1 } }
+    );
+
     res.json({ message: `${doc.name} restored successfully.`, client: doc });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -223,12 +254,44 @@ router.delete('/:id', restrictTo('super_admin'), async (req, res) => {
       if (!doc) return res.status(404).json({ message: 'Client not found.' });
       if (doc.userId) await User.findByIdAndDelete(doc.userId);
       else await User.deleteMany({ linkedClientId: doc._id });
+
+      // ZERO DATA LOSS: Soft-archive related items as orphans instead of permanently deleting them
+      const clientNameRegex = new RegExp('^' + doc.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i');
+      await getModel('content_tasks').updateMany(
+        { client: clientNameRegex },
+        { isArchived: true, archivedAt: new Date(), archivedReason: 'Orphaned: Parent client permanently deleted' }
+      );
+      await getModel('lenstalk_shoots_v1').updateMany(
+        { client: clientNameRegex },
+        { isArchived: true, archivedAt: new Date(), archivedReason: 'Orphaned: Parent client permanently deleted' }
+      );
+      await getModel('lenstalk_influencer_edits_v1').updateMany(
+        { client: clientNameRegex },
+        { isArchived: true, archivedAt: new Date(), archivedReason: 'Orphaned: Parent client permanently deleted' }
+      );
+
       return res.json({ message: 'Client permanently deleted.' });
     } else {
       doc = await Client.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date() }, { new: true });
       if (!doc) return res.status(404).json({ message: 'Client not found.' });
       if (doc.userId) await User.findByIdAndUpdate(doc.userId, { isActive: false, status: 'inactive' });
       else await User.updateMany({ linkedClientId: doc._id }, { isActive: false, status: 'inactive' });
+
+      // ── Cascading Soft-Archive for related generic records ──
+      const clientNameRegex = new RegExp('^' + doc.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i');
+      await getModel('content_tasks').updateMany(
+        { client: clientNameRegex, isArchived: { $ne: true } },
+        { isArchived: true, archivedAt: new Date(), archivedReason: 'Cascade: Client archived' }
+      );
+      await getModel('lenstalk_shoots_v1').updateMany(
+        { client: clientNameRegex, isArchived: { $ne: true } },
+        { isArchived: true, archivedAt: new Date(), archivedReason: 'Cascade: Client archived' }
+      );
+      await getModel('lenstalk_influencer_edits_v1').updateMany(
+        { client: clientNameRegex, isArchived: { $ne: true } },
+        { isArchived: true, archivedAt: new Date(), archivedReason: 'Cascade: Client archived' }
+      );
+
       res.json({ message: 'Client safely archived (Zero Data Loss Policy enforced).' });
     }
   } catch (err) {

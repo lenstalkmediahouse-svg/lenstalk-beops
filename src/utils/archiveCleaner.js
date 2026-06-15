@@ -1,8 +1,13 @@
 /**
  * archiveCleaner.js
  * Runs daily to permanently delete:
- * 1. Generic collection items where isArchived=true AND archivedAt is older than 30 days
- * 2. Employees/Clients where isArchived=true or status='archived' AND archivedAt > 30 days
+ * 1. Generic collection items where isArchived=true AND archivedAt is explicitly set and older than 30 days
+ * 2. Employees/Clients where isArchived=true or status='archived' AND archivedAt explicitly set > 30 days
+ *
+ * ROOT CAUSE FIX (2026-06-15):
+ * Removed the `updatedAt` fallback which was silently deleting any record older than 30 days
+ * that had isArchived=true — even if archivedAt was never set. This was a major source of data loss.
+ * Now ONLY records with an EXPLICIT archivedAt date older than 30 days are permanently deleted.
  */
 
 const mongoose = require('mongoose');
@@ -13,6 +18,11 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 // All generic collections that may have isArchived items
 const GENERIC_COLLECTIONS = [
   'content_tasks',
+  'leave_requests',
+  'dpr_entries',
+  'lenstalk_influencer_niches_v1',
+  'lenstalk_account_logs_v1',
+  'gear_requests',
   'lenstalk_freelancers_v1',
   'lenstalk_hiring_v1',
   'lenstalk_leaves_v1',
@@ -44,12 +54,12 @@ async function runArchiveCleanup() {
   for (const colName of GENERIC_COLLECTIONS) {
     try {
       const Model = getModel(colName);
+      // ROOT CAUSE FIX: Only delete records where archivedAt is EXPLICITLY set and older than 30 days.
+      // REMOVED: updatedAt fallback — it was silently deleting records that were never explicitly archived.
+      // Records with isArchived=true but missing/null archivedAt are KEPT SAFE.
       const result = await Model.deleteMany({
         isArchived: true,
-        $or: [
-          { archivedAt: { $lt: cutoff } },
-          { updatedAt: { $lt: cutoff } },
-        ],
+        archivedAt: { $ne: null, $exists: true, $lt: cutoff },
       });
       if (result.deletedCount > 0) {
         console.log(`   ✅ ${colName}: deleted ${result.deletedCount} expired archived records`);
@@ -63,14 +73,10 @@ async function runArchiveCleanup() {
   // Clean archived employees (via Employee model)
   try {
     const Employee = require('../modules/employees/employee.model');
+    // ROOT CAUSE FIX: Only delete if archivedAt is explicitly set (not just updatedAt).
     const result = await Employee.deleteMany({
-      $and: [
-        { $or: [{ isArchived: true }, { status: 'archived' }] },
-        { $or: [
-          { archivedAt: { $lt: cutoff } },
-          { updatedAt: { $lt: cutoff } },
-        ] },
-      ],
+      $or: [{ isArchived: true }, { status: 'archived' }],
+      archivedAt: { $ne: null, $exists: true, $lt: cutoff },
     });
     if (result.deletedCount > 0) {
       console.log(`   ✅ employees: deleted ${result.deletedCount} expired archived records`);
@@ -83,14 +89,10 @@ async function runArchiveCleanup() {
   // Clean archived clients (via Client model)
   try {
     const Client = require('../modules/clients/client.model');
+    // ROOT CAUSE FIX: Only delete if archivedAt is explicitly set (not just updatedAt).
     const result = await Client.deleteMany({
-      $and: [
-        { $or: [{ isArchived: true }, { status: 'archived' }] },
-        { $or: [
-          { archivedAt: { $lt: cutoff } },
-          { updatedAt: { $lt: cutoff } },
-        ] },
-      ],
+      $or: [{ isArchived: true }, { status: 'archived' }],
+      archivedAt: { $ne: null, $exists: true, $lt: cutoff },
     });
     if (result.deletedCount > 0) {
       console.log(`   ✅ clients: deleted ${result.deletedCount} expired archived records`);
@@ -109,10 +111,12 @@ async function runArchiveCleanup() {
  */
 function scheduleArchiveCleanup() {
   const INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-  // Run immediately on startup, then every 24h
-  runArchiveCleanup();
-  setInterval(runArchiveCleanup, INTERVAL_MS);
-  console.log('📅 [Archive Cleaner] Scheduled — runs every 24h. 30-day auto-delete is active.');
+  // Delay first run by 5 minutes after startup (don't run immediately on boot)
+  setTimeout(() => {
+    runArchiveCleanup();
+    setInterval(runArchiveCleanup, INTERVAL_MS);
+  }, 5 * 60 * 1000);
+  console.log('📅 [Archive Cleaner] Scheduled — first run in 5 min, then every 24h. Only explicit 30-day archived records will be deleted.');
 }
 
 module.exports = { scheduleArchiveCleanup, runArchiveCleanup };

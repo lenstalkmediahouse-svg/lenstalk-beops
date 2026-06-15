@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 
+const Counter = require('../generic/counter.model');
+
 const clientSchema = new mongoose.Schema(
   {
     clientCode:  { type: String, unique: true, sparse: true },
@@ -47,13 +49,33 @@ clientSchema.index({ isArchived: 1 });
 
 clientSchema.pre('save', async function () {
   if (this.isNew && !this.clientCode) {
-    const lastDoc = await this.constructor.findOne().sort({ clientCode: -1 });
-    let nextNum = 1;
-    if (lastDoc && lastDoc.clientCode) {
-      const match = lastDoc.clientCode.match(/\d+$/);
-      if (match) nextNum = parseInt(match[0], 10) + 1;
+    /**
+     * PERMANENT FIX: Atomic counter — never resets even if client docs are deleted.
+     * The old findOne().sort({clientCode:-1}) pattern caused gaps in numbering
+     * whenever the collection was wiped (replaceCollection incident).
+     * Now we use the same Counter collection that employees use.
+     */
+    let counter = await Counter.findById('clientCode');
+    if (!counter) {
+      // Bootstrap: seed counter from highest existing code (one-time migration)
+      const lastDoc = await this.constructor.findOne({}, { clientCode: 1 }).sort({ clientCode: -1 });
+      let lastNum = 0;
+      if (lastDoc && lastDoc.clientCode) {
+        const match = lastDoc.clientCode.match(/\d+$/);
+        if (match) lastNum = parseInt(match[0], 10);
+      }
+      await Counter.findOneAndUpdate(
+        { _id: 'clientCode' },
+        { $setOnInsert: { seq: lastNum } },
+        { new: true, upsert: true }
+      );
     }
-    this.clientCode = `LM-CLT-${String(nextNum).padStart(4, '0')}`;
+    counter = await Counter.findByIdAndUpdate(
+      'clientCode',
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    this.clientCode = `LM-CLT-${String(counter.seq).padStart(4, '0')}`;
   }
 });
 

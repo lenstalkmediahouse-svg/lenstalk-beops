@@ -184,15 +184,27 @@ router.put('/:id', authenticate, async (req, res) => {
 router.delete('/:id', authenticate, async (req, res) => {
   try {
     if (!checkAccess(req, res)) return;
-    const record = await PRM.findByIdAndUpdate(
-      req.params.id,
-      { isArchived: true },
-      { new: true }
-    );
-    if (!record) return res.status(404).json({ message: 'Record not found.' });
-    res.json({ message: 'Archived successfully.', record });
+    if (req.query.permanent === 'true') {
+      // ZERO DATA LOSS — Permanent delete: SUPER ADMIN ONLY
+      if (req.user?.primaryRole !== 'super_admin') {
+        return res.status(403).json({ message: 'Forbidden: Permanent delete is restricted to Super Admin only.' });
+      }
+      const record = await PRM.findByIdAndDelete(req.params.id);
+      if (!record) return res.status(404).json({ message: 'Record not found.' });
+      const auditLog = require('../../middleware/auditLogger');
+      auditLog.write({ action: 'DATA_PERM_DELETE', actor: req.user?.name || 'Super Admin', details: `PERMANENT DELETE PRM record | ID: ${req.params.id}`, module: 'PRM Registry', ip: req.ip || '—' });
+      res.json({ message: 'Record permanently deleted.' });
+    } else {
+      const record = await PRM.findByIdAndUpdate(
+        req.params.id,
+        { isArchived: true, archivedAt: new Date() },
+        { new: true }
+      );
+      if (!record) return res.status(404).json({ message: 'Record not found.' });
+      res.json({ message: 'Archived successfully.', record });
+    }
   } catch (err) {
-    console.error('PRM archive error:', err);
+    console.error('PRM delete error:', err);
     res.status(500).json({ message: 'Server error.' });
   }
 });
