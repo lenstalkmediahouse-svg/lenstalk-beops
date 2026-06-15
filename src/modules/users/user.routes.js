@@ -264,6 +264,42 @@ router.put('/:id', authenticate, async (req, res) => {
 });
 
 /**
+ * GET /api/users/backup/download
+ * Download a full database backup as a single JSON file — SUPER ADMIN ONLY
+ */
+router.get('/backup/download', authenticate, async (req, res) => {
+  try {
+    if (req.user?.primaryRole !== 'super_admin') {
+      return res.status(403).json({ message: 'Forbidden: Backups can only be downloaded by Super Admin.' });
+    }
+
+    const mongoose = require('mongoose');
+    const db = mongoose.connection.db;
+    const collections = await db.listCollections().toArray();
+    
+    const backupData = {
+      backupDate: new Date().toISOString(),
+      database: db.databaseName,
+      collections: {}
+    };
+
+    for (const col of collections) {
+      const name = col.name;
+      if (name.startsWith('system.')) continue;
+      const docs = await db.collection(name).find({}).toArray();
+      backupData.collections[name] = docs;
+    }
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename=lenstalk_db_backup_${new Date().toISOString().slice(0, 10)}.json`);
+    res.status(200).send(JSON.stringify(backupData, null, 2));
+  } catch (error) {
+    console.error('Backup download error:', error);
+    res.status(500).json({ message: 'Server error generating backup download.' });
+  }
+});
+
+/**
  * DELETE /api/users/:id
  * Delete a user
  */
