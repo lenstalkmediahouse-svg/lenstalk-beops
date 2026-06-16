@@ -9,15 +9,7 @@ const User = require('../users/user.model');
 const PasswordReset = require('./passwordReset.model');
 const { sendPasswordResetEmail } = require('../../utils/mailer');
 
-// Rate limiter: max 10 login attempts per IP per 15 minutes (brute-force protection)
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { message: 'Too many login attempts. Please try again in 15 minutes.' },
-});
-// Rate limiter: max 3 password reset requests per IP per 30 minutes
+// forgotLimiter: max 3 password reset requests per IP per 30 minutes
 const forgotLimiter = rateLimit({
   windowMs: 30 * 60 * 1000,
   max: 3,
@@ -26,7 +18,9 @@ const forgotLimiter = rateLimit({
   message: { message: 'Too many reset requests. Please wait 30 minutes.' },
 });
 
-router.post('/login', loginLimiter, login);
+// NOTE: loginLimiter is applied globally in app.js (20 req/15min per IP).
+// No additional limiter needed here.
+router.post('/login', login);
 router.get('/me', authenticate, getMe);
 router.post('/logout', authenticate, logout);
 
