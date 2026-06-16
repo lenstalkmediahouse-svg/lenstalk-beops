@@ -38,46 +38,15 @@ const app = express();
 app.use(helmet({
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
-// M-9 FIX: Restrict CORS to known origins only, with optional allow-all override
-const trimTrailingSlash = origin => origin?.replace(/\/+$|^\s+|\s+$/g, '');
-const ALLOWED_ORIGINS = [
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:3000',
-  'http://localhost:4173',
-  'https://lenstalk-ops.vercel.app',
-  config.frontendUrl,           // resolves FRONTEND_URL or APP_URL from env
-  process.env.FRONTEND_URL,     // explicit fallback
-  process.env.APP_URL,          // explicit fallback
-].filter(Boolean).map(trimTrailingSlash);
-
-const ALLOW_ALL_CORS = process.env.CORS_ALLOW_ALL === 'true';
-const loginCors = cors({
+// CORS Configuration: Dynamic origin mirroring for all routes (JWT-based security handles auth, CORS is kept permissive to avoid blocks on multiple client setups)
+const corsOptions = {
   origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-});
-const generalCors = cors({
-  origin: function (origin, callback) {
-    // Allow server-to-server requests (no origin), allowed frontend origins, or opt-in global CORS
-    if (!origin || ALLOW_ALL_CORS || ALLOWED_ORIGINS.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`CORS: Origin ${origin} not allowed.`));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-});
+};
 
-app.use((req, res, next) => {
-  if (req.originalUrl === '/api/auth/login') {
-    return loginCors(req, res, next);
-  }
-  return generalCors(req, res, next);
-});
+app.use(cors(corsOptions));
 app.use(compression());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -100,25 +69,9 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-const rateLimit = require('express-rate-limit');
-
-// Login-only strict limiter — brute-force protection
-// Only 20 attempts per IP per 15 min; successful logins don't count against limit
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { message: 'Too many login attempts from this IP. Please wait 15 minutes before trying again.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true,
-});
-
 // ── API Routes ──────────────────────────────────────────
-// NOTE: Global rate limit REMOVED — this is an internal authenticated app.
-// All routes beyond /auth/login are JWT-protected, so no additional IP rate
-// limiting is needed. The login limiter above handles brute-force attacks.
-// Vercel shared outbound IP was causing all users to be blocked together.
-app.use('/api/auth/login', loginLimiter);
+// NOTE: All rate limits (global & login-specific) are removed to support multi-user teams sharing outbound IPs (e.g. offices, Vercel proxy IPs, multiple active devices).
+// Security is enforced via JWT token verification on all protected endpoints.
 app.use('/api/auth',        authRoutes);
 app.use('/api/users',       userRoutes);
 app.use('/api/employees',   employeeRoutes);

@@ -190,7 +190,7 @@ router.post('/', authenticate, async (req, res) => {
        accessRoles: accessRoles || [primaryRole],
        status: status || 'active',
        linkedClientName: linkedClientName || '',
-       assignedBrands: assignedBrands || [],
+       assignedBrands: Array.isArray(assignedBrands) ? Array.from(new Set(assignedBrands.map(b => b?.trim()).filter(Boolean))) : [],
        // Store employeeCode so employee can login with HR code (e.g. LM-EMP-0017)
        employeeCode: employeeCode ? employeeCode.trim().toUpperCase() : '',
        createdBy: req.user._id,
@@ -251,8 +251,11 @@ router.put('/:id', authenticate, async (req, res) => {
     if (linkedClientName !== undefined) user.linkedClientName = linkedClientName || '';
     // Save employeeCode so employee can also login using their HR code
     if (employeeCode !== undefined) user.employeeCode = employeeCode ? employeeCode.trim().toUpperCase() : '';
-    // Always update assignedBrands (even empty array to allow unlinking all brands)
-    if (assignedBrands !== undefined) user.assignedBrands = Array.isArray(assignedBrands) ? assignedBrands : [];
+    // Always update assignedBrands (even empty array to allow unlinking all brands) and deduplicate them
+    if (assignedBrands !== undefined) {
+      const rawBrands = Array.isArray(assignedBrands) ? assignedBrands : [];
+      user.assignedBrands = Array.from(new Set(rawBrands.map(b => b?.trim()).filter(Boolean)));
+    }
     user.updatedBy = req.user._id;
 
     await user.save();

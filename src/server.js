@@ -17,6 +17,29 @@ const startServer = async () => {
     await connectDB();
     console.log(`✅ Database connected`);
 
+    // One-time data cleanup: deduplicate assignedBrands for all existing users
+    try {
+      const User = require('./modules/users/user.model');
+      const users = await User.find({ assignedBrands: { $exists: true, $not: { $size: 0 } } });
+      let updatedCount = 0;
+      for (const u of users) {
+        if (Array.isArray(u.assignedBrands)) {
+          const originalLength = u.assignedBrands.length;
+          const uniqueBrands = Array.from(new Set(u.assignedBrands.map(b => b?.trim()).filter(Boolean)));
+          if (uniqueBrands.length !== originalLength) {
+            u.assignedBrands = uniqueBrands;
+            await u.save();
+            updatedCount++;
+          }
+        }
+      }
+      if (updatedCount > 0) {
+        console.log(`🧹 Cleaned up duplicate assignedBrands for ${updatedCount} users.`);
+      }
+    } catch (migErr) {
+      console.warn(`⚠️ One-time duplicate assignedBrands cleanup failed: ${migErr.message}`);
+    }
+
     // Start 30-day archive auto-delete scheduler after DB is connected.
     try {
       scheduleArchiveCleanup();
