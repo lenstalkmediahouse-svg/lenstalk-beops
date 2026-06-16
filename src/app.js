@@ -102,28 +102,23 @@ app.get('/api/health', (req, res) => {
 
 const rateLimit = require('express-rate-limit');
 
-// Strict limiter for login only — prevents brute-force attacks
+// Login-only strict limiter — brute-force protection
+// Only 20 attempts per IP per 15 min; successful logins don't count against limit
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,     // 15 minutes
-  max: 20,                       // 20 login attempts per IP per 15 min
+  windowMs: 15 * 60 * 1000,
+  max: 20,
   message: { message: 'Too many login attempts from this IP. Please wait 15 minutes before trying again.' },
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: true,  // don't count successful logins against the limit
-});
-
-// Generous limiter for all other API routes — allows normal multi-module app usage
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,     // 15 minutes
-  max: 2000,                     // 2000 requests per IP per 15 min (was 500 — too low for parallel API calls)
-  message: { message: 'Too many requests from this IP, please try again after 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false,
+  skipSuccessfulRequests: true,
 });
 
 // ── API Routes ──────────────────────────────────────────
-app.use('/api/auth/login', loginLimiter); // apply strict limit on login before globalLimiter
-app.use('/api', globalLimiter);
+// NOTE: Global rate limit REMOVED — this is an internal authenticated app.
+// All routes beyond /auth/login are JWT-protected, so no additional IP rate
+// limiting is needed. The login limiter above handles brute-force attacks.
+// Vercel shared outbound IP was causing all users to be blocked together.
+app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth',        authRoutes);
 app.use('/api/users',       userRoutes);
 app.use('/api/employees',   employeeRoutes);
