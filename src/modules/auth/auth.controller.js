@@ -18,7 +18,11 @@ const login = async (req, res) => {
     }
 
     let user = await User.findOne({
-      $or: [{ loginId: { $in: [rawLoginId, normalizedLoginId] } }, { email: normalizedLoginId }],
+      $or: [
+        { loginId: { $in: [rawLoginId, normalizedLoginId] } },  // e.g. ashish_kumar
+        { email: normalizedLoginId },                            // e.g. ashish@lenstalk.com
+        { employeeCode: { $in: [rawLoginId, rawLoginId.toUpperCase(), rawLoginId.toLowerCase()] } }, // e.g. LM-EMP-0017
+      ],
       // isActive must be true OR not set at all (backward-compat for legacy users)
       isActive: { $ne: false },
       status: { $nin: ['inactive', 'suspended'] },

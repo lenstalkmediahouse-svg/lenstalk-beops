@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     mobile: { type: String, trim: true },
     loginId: { type: String, required: true, unique: true, trim: true },
+    // employeeCode: stored so employees can log in using their HR code (e.g. LM-EMP-0017)
+    employeeCode: { type: String, trim: true, default: '' },
     passwordHash: { type: String, required: true },
     primaryRole: {
       type: String,
@@ -31,6 +33,7 @@ const userSchema = new mongoose.Schema(
 userSchema.index({ primaryRole: 1 });
 userSchema.index({ linkedEmployeeId: 1 });
 userSchema.index({ linkedClientId: 1 });
+userSchema.index({ employeeCode: 1 }, { sparse: true }); // sparse = only index docs where employeeCode exists
 
 // Password hashing pre-save
 userSchema.pre('save', async function () {

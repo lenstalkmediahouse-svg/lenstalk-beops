@@ -168,7 +168,7 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(403).json({ message: 'Access denied.' });
     }
     
-    const { name, email, loginId, password, primaryRole, accessRoles, status, linkedClientName, assignedBrands } = req.body;
+    const { name, email, loginId, password, primaryRole, accessRoles, status, linkedClientName, assignedBrands, employeeCode } = req.body;
     
     if (!name || !email || !loginId || !password || !primaryRole) {
       return res.status(400).json({ message: 'Missing required fields' });
@@ -191,6 +191,8 @@ router.post('/', authenticate, async (req, res) => {
        status: status || 'active',
        linkedClientName: linkedClientName || '',
        assignedBrands: assignedBrands || [],
+       // Store employeeCode so employee can login with HR code (e.g. LM-EMP-0017)
+       employeeCode: employeeCode ? employeeCode.trim().toUpperCase() : '',
        createdBy: req.user._id,
     });
 
@@ -198,8 +200,10 @@ router.post('/', authenticate, async (req, res) => {
 
     // Auto-create Employee record if it's a staff member (not client)
     if (primaryRole !== 'client') {
+      // Use the provided employeeCode if available, else use loginId as fallback
+      const empCode = (employeeCode ? employeeCode.trim().toUpperCase() : null) || loginId;
       const employee = new Employee({
-        employeeCode: loginId,
+        employeeCode: empCode,
         fullName: name,
         email: email,
         mobile: '',
@@ -232,7 +236,7 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.status(403).json({ message: 'Access denied.' });
     }
 
-    const { name, email, loginId, primaryRole, accessRoles, status, isActive, linkedClientName, assignedBrands } = req.body;
+    const { name, email, loginId, primaryRole, accessRoles, status, isActive, linkedClientName, assignedBrands, employeeCode } = req.body;
     
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -245,6 +249,8 @@ router.put('/:id', authenticate, async (req, res) => {
     if (status) user.status = status;
     if (isActive !== undefined) user.isActive = isActive;
     if (linkedClientName !== undefined) user.linkedClientName = linkedClientName || '';
+    // Save employeeCode so employee can also login using their HR code
+    if (employeeCode !== undefined) user.employeeCode = employeeCode ? employeeCode.trim().toUpperCase() : '';
     // Always update assignedBrands (even empty array to allow unlinking all brands)
     if (assignedBrands !== undefined) user.assignedBrands = Array.isArray(assignedBrands) ? assignedBrands : [];
     user.updatedBy = req.user._id;
