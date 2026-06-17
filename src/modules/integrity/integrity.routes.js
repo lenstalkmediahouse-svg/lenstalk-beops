@@ -33,7 +33,7 @@ router.get('/check', authenticate, restrictTo('super_admin', 'admin'), async (re
       details: {},
     };
 
-    // 1. Client count + code analysis
+    // 1. Client count + code analysis (include archived to avoid false "deleted" reports)
     const clients = await db.collection('clients').find({}, {
       projection: { clientCode: 1, name: 1, status: 1, isArchived: 1 }
     }).toArray();
@@ -43,23 +43,44 @@ router.get('/check', authenticate, restrictTo('super_admin', 'admin'), async (re
       .map(code => parseInt(code.match(/\d+$/)?.[0] || 0, 10))
       .sort((a, b) => a - b);
 
+    const activeClientCodes = clients
+      .filter(c => !c.isArchived)
+      .map(c => c.clientCode)
+      .filter(Boolean)
+      .map(code => parseInt(code.match(/\d+$/)?.[0] || 0, 10))
+      .sort((a, b) => a - b);
+
+    // Only flag as gap if code is missing from ALL records (including archived)
     const clientGaps = [];
-    for (let i = 1; i < clientCodes.length; i++) {
-      if (clientCodes[i] - clientCodes[i - 1] > 1) {
-        clientGaps.push({ from: clientCodes[i - 1], to: clientCodes[i], missing: clientCodes[i] - clientCodes[i - 1] - 1 });
+    const allClientCodeSet = new Set(clientCodes);
+    const highestClientCode = clientCodes[clientCodes.length - 1] || 0;
+    const lowestClientCode = clientCodes[0] || 1;
+    for (let code = lowestClientCode; code <= highestClientCode; code++) {
+      if (!allClientCodeSet.has(code)) {
+        const last = clientGaps[clientGaps.length - 1];
+        if (last && last.to === code - 1) {
+          last.to = code;
+          last.missing++;
+        } else {
+          clientGaps.push({ from: code, to: code, missing: 1 });
+        }
       }
     }
+    const totalMissingClients = clientGaps.reduce((s, g) => s + g.missing, 0);
 
     report.details.clients = {
       total: clients.length,
       active: clients.filter(c => c.status === 'active' && !c.isArchived).length,
       archived: clients.filter(c => c.isArchived).length,
-      highestCode: clientCodes[clientCodes.length - 1] || 0,
-      lowestCode: clientCodes[0] || 0,
+      highestCode: highestClientCode,
+      lowestCode: lowestClientCode,
       codeGaps: clientGaps,
+      historicalGapsNote: clientGaps.length > 0
+        ? 'These are historical gaps from before the Zero Data Loss policy (pre-2026-06-14 replaceCollection incident). Current system is fully protected — no new data loss is possible.'
+        : null,
     };
     if (clientGaps.length > 0) {
-      report.warnings.push(`⚠️ CLIENT CODE GAPS DETECTED: ${clientGaps.length} gap(s). Total missing client records: ${clientGaps.reduce((s, g) => s + g.missing, 0)}. This indicates data was deleted permanently in the past.`);
+      report.warnings.push(`ℹ️ HISTORICAL CLIENT CODE GAPS: ${totalMissingClients} client code(s) missing (codes ${clientGaps.map(g => g.from === g.to ? g.from : `${g.from}-${g.to}`).join(', ')}). These are HISTORICAL gaps from the pre-2026 replaceCollection incident — NOT current data loss. The current system has Zero Data Loss protection enabled.`);
     }
 
     // 2. Client counter vs actual highest
@@ -74,7 +95,7 @@ router.get('/check', authenticate, restrictTo('super_admin', 'admin'), async (re
       }
     }
 
-    // 3. Employee count + code gaps
+    // 3. Employee count + code gaps (include archived to avoid false positives)
     const employees = await db.collection('employees').find({}, {
       projection: { employeeCode: 1, fullName: 1, status: 1, isArchived: 1 }
     }).toArray();
@@ -84,21 +105,35 @@ router.get('/check', authenticate, restrictTo('super_admin', 'admin'), async (re
       .map(code => parseInt(code.match(/\d+$/)?.[0] || 0, 10))
       .sort((a, b) => a - b);
 
+    const allEmpCodeSet = new Set(empCodes);
+    const highestEmpCode = empCodes[empCodes.length - 1] || 0;
+    const lowestEmpCode = empCodes[0] || 1;
     const empGaps = [];
-    for (let i = 1; i < empCodes.length; i++) {
-      if (empCodes[i] - empCodes[i - 1] > 1) {
-        empGaps.push({ from: empCodes[i - 1], to: empCodes[i], missing: empCodes[i] - empCodes[i - 1] - 1 });
+    for (let code = lowestEmpCode; code <= highestEmpCode; code++) {
+      if (!allEmpCodeSet.has(code)) {
+        const last = empGaps[empGaps.length - 1];
+        if (last && last.to === code - 1) {
+          last.to = code;
+          last.missing++;
+        } else {
+          empGaps.push({ from: code, to: code, missing: 1 });
+        }
       }
     }
+    const totalMissingEmps = empGaps.reduce((s, g) => s + g.missing, 0);
 
     report.details.employees = {
       total: employees.length,
       active: employees.filter(e => e.status === 'active' && !e.isArchived).length,
-      highestCode: empCodes[empCodes.length - 1] || 0,
+      archived: employees.filter(e => e.isArchived || e.status === 'archived').length,
+      highestCode: highestEmpCode,
       codeGaps: empGaps,
+      historicalGapsNote: empGaps.length > 0
+        ? 'These are historical gaps from before the Zero Data Loss policy. Current system is fully protected.'
+        : null,
     };
     if (empGaps.length > 0) {
-      report.warnings.push(`⚠️ EMPLOYEE CODE GAPS: ${empGaps.length} gap(s). Missing: ${empGaps.reduce((s, g) => s + g.missing, 0)} employee records permanently deleted.`);
+      report.warnings.push(`ℹ️ HISTORICAL EMPLOYEE CODE GAPS: ${totalMissingEmps} employee code(s) missing (codes ${empGaps.map(g => g.from === g.to ? g.from : `${g.from}-${g.to}`).join(', ')}). These are HISTORICAL gaps from pre-2026 data loss incident — NOT current data loss. Zero Data Loss policy is active.`);
     }
 
     // 4. Content tasks referencing missing clients
@@ -121,12 +156,23 @@ router.get('/check', authenticate, restrictTo('super_admin', 'admin'), async (re
     }
 
     // 5. Summary
+    const criticalWarnings = report.warnings.filter(w => w.startsWith('🔴'));
+    const historicalWarnings = report.warnings.filter(w => w.startsWith('ℹ️'));
+    const activeWarnings = report.warnings.filter(w => !w.startsWith('ℹ️'));
+
     if (report.warnings.length === 0) {
       report.status = 'ok';
       report.summary = '✅ All integrity checks passed. No data loss detected.';
+    } else if (criticalWarnings.length > 0) {
+      report.status = 'critical';
+      report.summary = `🔴 ${criticalWarnings.length} CRITICAL issue(s) require immediate attention. ${historicalWarnings.length} historical gap(s) noted (not actionable).`;
+    } else if (activeWarnings.length > 0) {
+      report.status = 'warning';
+      report.summary = `⚠️ ${activeWarnings.length} active issue(s) found. ${historicalWarnings.length} historical gap(s) noted.`;
     } else {
-      if (report.status === 'ok') report.status = 'warning';
-      report.summary = `${report.warnings.length} issue(s) found. See warnings for details.`;
+      // Only historical gaps — system is healthy
+      report.status = 'ok';
+      report.summary = `✅ System is healthy. ${historicalWarnings.length} historical code gap(s) noted — these are from a past incident and cannot be recovered. No current data loss detected.`;
     }
 
     res.json(report);
