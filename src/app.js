@@ -34,13 +34,40 @@ const integrityRoutes = require('./modules/integrity/integrity.routes');
 
 const app = express();
 
+// CRIT-2 FIX: Crash on startup if JWT_SECRET is missing in production.
+// Without this, the app silently falls back to a hardcoded public secret, allowing
+// anyone who reads the source code to forge valid JWTs for any user.
+if (config.nodeEnv === 'production' && !process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is not set. Cannot start in production without a secure secret.');
+  process.exit(1);
+}
+
 // Security & parsing middleware
 app.use(helmet({
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
-// CORS Configuration: Dynamic origin mirroring for all routes (JWT-based security handles auth, CORS is kept permissive to avoid blocks on multiple client setups)
+
+// CRIT-1 FIX: Explicit CORS allowlist. Replaced `origin: true` which mirrored back
+// any origin (including attacker-controlled sites), enabling CSRF with credentials.
+const ALLOWED_ORIGINS = [
+  'https://lenstalk-ops.vercel.app',
+  process.env.FRONTEND_URL,
+  process.env.APP_URL,
+  // Dev origins
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:4000',
+].filter(Boolean);
+
 const corsOptions = {
-  origin: true,
+  origin: (origin, callback) => {
+    // Allow server-to-server (no Origin header) and listed origins
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    console.warn(`[CORS] Blocked request from unlisted origin: ${origin}`);
+    callback(new Error('CORS: This origin is not permitted.'));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
@@ -48,7 +75,8 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(compression());
-app.use(express.json({ limit: '50mb' }));
+// HIGH-7 FIX: Reduced from 50mb to 1mb default. PDF routes override locally with 10mb.
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Reject API requests quickly when MongoDB is unavailable, but allow health checks through
@@ -128,10 +156,13 @@ app.post('/api/public/influencer-register', async (req, res) => {
     const normalizedHandle = primaryHandle.toLowerCase().replace(/^@/, '');
     const duplicateQuery = [];
     if (normalizedHandle) {
-      duplicateQuery.push({ handle: { $regex: new RegExp(`^@?${normalizedHandle}$`, 'i') } });
+      // MED-7 FIX: Escape user input before regex to prevent ReDoS
+      const escapedHandle = normalizedHandle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      duplicateQuery.push({ handle: { $regex: new RegExp(`^@?${escapedHandle}$`, 'i') } });
     }
     if (email?.trim()) {
-      duplicateQuery.push({ email: { $regex: new RegExp(`^${email.trim()}$`, 'i') } });
+      const escapedEmail = email.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      duplicateQuery.push({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
     }
     if (duplicateQuery.length > 0) {
       const existing = await InfluencerModel.findOne({ $or: duplicateQuery });

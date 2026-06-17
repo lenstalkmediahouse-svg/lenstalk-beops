@@ -38,10 +38,21 @@ router.post('/', async (req, res) => {
   } catch (err) { res.status(400).json({ message: err.message }); }
 });
 
-router.patch('/:id', async (req, res) => {
+// HIGH-6 FIX: Block workflow state fields via the base PATCH route.
+// Workflow transitions (approve/reject/submit) must go through their dedicated
+// role-restricted endpoints to prevent privilege escalation.
+router.patch('/:id', authenticate, async (req, res) => {
   try {
     const Model = Tasks();
-    const doc = await Model.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const isPrivileged = ['super_admin', 'admin', 'operations_head'].includes(req.user.primaryRole);
+
+    // Strip workflow/approval fields for non-privileged users
+    const update = isPrivileged ? req.body : (() => {
+      const { workflowStatus, approvedAt, approvedBy, submittedAt, adminFeedback, rejectedAt, ...safeFields } = req.body;
+      return safeFields;
+    })();
+
+    const doc = await Model.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!doc) return res.status(404).json({ message: 'Task not found.' });
     res.json(doc);
   } catch (err) { res.status(400).json({ message: err.message }); }

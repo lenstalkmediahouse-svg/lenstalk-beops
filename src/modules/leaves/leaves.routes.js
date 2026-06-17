@@ -76,9 +76,22 @@ router.post('/', async (req, res) => {
   } catch (err) { res.status(400).json({ message: err.message }); }
 });
 
-router.patch('/:id', async (req, res) => {
+// HIGH-4 FIX: Added authorization check.
+// Previously any authenticated user could PATCH any leave record including `status: 'approved'`
+// bypassing the dedicated /approve and /reject guarded endpoints.
+router.patch('/:id', authenticate, async (req, res) => {
   try {
     const Model = Leaves();
+    const isPrivileged = ['super_admin', 'admin', 'hr'].includes(req.user.primaryRole);
+
+    // Non-privileged users cannot touch status/approval fields — those go through /approve /reject
+    if (!isPrivileged) {
+      const { status, approvedBy, approvedAt, rejectedBy, rejectedAt, rejectionReason, hrNote, ...safeFields } = req.body;
+      const doc = await Model.findByIdAndUpdate(req.params.id, safeFields, { new: true });
+      if (!doc) return res.status(404).json({ message: 'Leave not found.' });
+      return res.json(doc);
+    }
+
     const doc = await Model.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!doc) return res.status(404).json({ message: 'Leave not found.' });
     res.json(doc);

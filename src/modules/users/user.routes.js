@@ -45,9 +45,20 @@ router.patch('/update-password', authenticate, async (req, res) => {
 });
 
 /**
- * Helper to auto-sync migrated employees or clients that are missing users
+ * HIGH-3 FIX: Added concurrency guard + 60s cooldown to prevent this heavy
+ * sync function from running on every GET /api/users request.
+ * Previously: N concurrent admin page loads → N parallel full-DB scans.
+ * Now: At most 1 run per 60 seconds, skips if already running.
  */
+let syncRunning = false;
+let lastSyncAt = 0;
+const SYNC_COOLDOWN_MS = 60 * 1000; // 60 seconds
+
 async function syncMissingUsers(adminId) {
+  const now = Date.now();
+  if (syncRunning || (now - lastSyncAt) < SYNC_COOLDOWN_MS) return;
+  syncRunning = true;
+  lastSyncAt = now;
   try {
     // Sync missing employees
     const missingEmps = await Employee.find({ userId: { $exists: false }, isArchived: { $ne: true } });
@@ -131,6 +142,8 @@ async function syncMissingUsers(adminId) {
     }
   } catch (err) {
     console.error('Initial bulk sync error:', err);
+  } finally {
+    syncRunning = false; // Release lock so next call after cooldown can run
   }
 }
 
@@ -198,8 +211,10 @@ router.post('/', authenticate, async (req, res) => {
 
     await user.save();
 
-    // Auto-create Employee record if it's a staff member (not client)
-    if (primaryRole !== 'client') {
+    // MED-9 FIX: Only auto-create Employee record for roles that are actual HR staff.
+    // Previously this ran for accountant, prm, smm etc., cluttering the HR employee list.
+    const EMPLOYEE_ROLES = ['employee', 'cinematographer', 'hr', 'operations_head', 'ads_manager_creators'];
+    if (EMPLOYEE_ROLES.includes(primaryRole)) {
       // Use the provided employeeCode if available, else use loginId as fallback
       const empCode = (employeeCode ? employeeCode.trim().toUpperCase() : null) || loginId;
       const employee = new Employee({

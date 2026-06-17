@@ -384,6 +384,8 @@ router.patch('/:id/registrations/:regId/promote', authenticate, async (req, res)
 // ─── AUTHENTICATED: Update registration status (shortlisted / rejected) ──────
 router.patch('/:id/registrations/:regId/status', authenticate, async (req, res) => {
   try {
+    const { status } = req.body; // CRIT-4 FIX: was missing, causing undefined/outer-scope status to be used
+    if (!status) return res.status(400).json({ message: 'status is required.' });
     const updatedCampaign = await InfluencerCampaign.findOneAndUpdate(
       { _id: req.params.id, 'registrations._id': req.params.regId },
       { $set: { 'registrations.$.reviewStatus': status } },

@@ -82,9 +82,27 @@ router.post('/', authenticate, async (req, res) => {
   } catch (err) { res.status(400).json({ message: err.message }); }
 });
 
+// HIGH-5 FIX: Added ownership check and field protection.
+// Previously any authenticated user could PATCH any attendance record — including other employees' records.
 router.patch('/:id', authenticate, async (req, res) => {
   try {
     const Model = Att();
+    const isAdminRole = ['super_admin', 'admin', 'hr', 'operations_head'].includes(req.user.primaryRole);
+
+    if (!isAdminRole) {
+      // Non-privileged users can only update their own records
+      const existing = await Model.findById(req.params.id);
+      if (!existing) return res.status(404).json({ message: 'Record not found.' });
+      if (existing.userId !== req.user._id.toString()) {
+        return res.status(403).json({ message: 'Forbidden: You can only edit your own attendance records.' });
+      }
+      // Also block them from changing sensitive fields
+      const { status, source, employeeId, employeeName, employeeCode, createdBy, ...safeFields } = req.body;
+      const doc = await Model.findByIdAndUpdate(req.params.id, safeFields, { new: true });
+      if (!doc) return res.status(404).json({ message: 'Record not found.' });
+      return res.json(doc);
+    }
+
     const doc = await Model.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!doc) return res.status(404).json({ message: 'Record not found.' });
     res.json(doc);

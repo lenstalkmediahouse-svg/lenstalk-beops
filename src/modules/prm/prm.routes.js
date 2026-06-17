@@ -122,7 +122,8 @@ router.get('/', authenticate, async (req, res) => {
   try {
     if (!checkAccess(req, res)) return;
     const { type, archived } = req.query;
-    const filter = archived === 'true' ? { isArchived: true } : { isArchived: false };
+    // MED-2 FIX: Use $ne:true (not strict false) so legacy records without isArchived field are still visible
+    const filter = archived === 'true' ? { isArchived: true } : { isArchived: { $ne: true } };
     if (type) filter.type = type;
     const records = await PRM.find(filter).sort({ createdAt: -1 });
     res.json(records);

@@ -12,7 +12,9 @@ const { authenticate } = require('../../middleware/auth');
  * 
  * Body: { data: "<base64 PDF string>", filename: "Report.pdf" }
  */
-router.post('/download', authenticate, (req, res) => {
+// HIGH-7 FIX: Override global 1mb body limit for PDF downloads.
+// Base64-encoded PDFs can be several MB. This override applies ONLY to this route.
+router.post('/download', authenticate, express.json({ limit: '10mb' }), (req, res) => {
   try {
     const { data, filename } = req.body;
 
