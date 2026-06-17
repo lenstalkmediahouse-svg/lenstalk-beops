@@ -3,6 +3,31 @@ const config = require('../../config');
 const User = require('../users/user.model');
 const auditLog = require('../../middleware/auditLogger');
 
+// HIGH-2: In-memory rate limiting to prevent credential brute-forcing per loginId
+const loginAttempts = new Map(); // loginId -> { count, resetAt }
+const MAX_FAILED_ATTEMPTS = 10;
+const LOCKOUT_TIME = 15 * 60 * 1000; // 15 minutes
+
+// Periodic garbage collection for expired locks (runs every 15 minutes)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of loginAttempts.entries()) {
+    if (val.resetAt <= now) {
+      loginAttempts.delete(key);
+    }
+  }
+}, 15 * 60 * 1000).unref();
+
+function recordFailedAttempt(key) {
+  const now = Date.now();
+  const attempt = loginAttempts.get(key);
+  if (!attempt || attempt.resetAt <= now) {
+    loginAttempts.set(key, { count: 1, resetAt: now + LOCKOUT_TIME });
+  } else {
+    attempt.count += 1;
+    loginAttempts.set(key, attempt);
+  }
+}
 
 /**
  * POST /auth/login
@@ -15,6 +40,18 @@ const login = async (req, res) => {
 
     if (!rawLoginId || !password) {
       return res.status(400).json({ message: 'Login ID and password are required.' });
+    }
+
+    const attemptKey = normalizedLoginId || rawLoginId;
+    const attempt = loginAttempts.get(attemptKey);
+    const now = Date.now();
+
+    if (attempt && attempt.count >= MAX_FAILED_ATTEMPTS && attempt.resetAt > now) {
+      const remainingSec = Math.ceil((attempt.resetAt - now) / 1000);
+      const remainingMin = Math.ceil(remainingSec / 60);
+      return res.status(429).json({
+        message: `Too many failed login attempts. Account locked. Try again in ${remainingMin} minute(s).`
+      });
     }
 
     let user = await User.findOne({
@@ -31,13 +68,18 @@ const login = async (req, res) => {
 
 
     if (!user) {
+      recordFailedAttempt(attemptKey);
       return res.status(401).json({ message: 'Invalid credentials.' });
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      recordFailedAttempt(attemptKey);
       return res.status(401).json({ message: 'Invalid credentials.' });
     }
+
+    // Success! Clear attempt history for this loginId
+    loginAttempts.delete(attemptKey);
 
     // Update last login
     user.lastLoginAt = new Date();
