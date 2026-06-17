@@ -62,7 +62,12 @@ const ALLOWED_ORIGINS = [
 const corsOptions = {
   origin: (origin, callback) => {
     // Allow server-to-server (no Origin header) and listed origins
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+    if (!origin) {
+      return callback(null, true);
+    }
+    const isAllowed = ALLOWED_ORIGINS.includes(origin) ||
+      /^https?:\/\/(?:[a-z0-9-]+\.)*lenstalkmedia\.com$/i.test(origin);
+    if (isAllowed) {
       return callback(null, true);
     }
     console.warn(`[CORS] Blocked request from unlisted origin: ${origin}`);
