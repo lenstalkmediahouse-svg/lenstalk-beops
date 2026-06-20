@@ -16,7 +16,7 @@ const COLLECTION_ACCESS = {
 
   // Equipment & Shoots
   lenstalk_shoots_v1:         ['super_admin', 'admin', 'operations_head', 'hr', 'employee', 'cinematographer', 'smm', 'Operations', 'HR System'],
-  lenstalk_equipment_v1:      ['super_admin', 'admin', 'operations_head', 'employee', 'cinematographer', 'Operations'],
+  lenstalk_equipment_v1:      ['super_admin', 'admin', 'operations_head', 'hr', 'employee', 'cinematographer', 'Operations', 'HR System'],
 
   // HR Documents (HR + Admin only)
   lenstalk_hr_documents_v1:   ['super_admin', 'admin', 'hr', 'HR System'],
