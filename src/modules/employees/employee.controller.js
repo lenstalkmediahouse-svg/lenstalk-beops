@@ -11,8 +11,25 @@ const getModel = require('../generic/generic.model');
 exports.getAll = async (req, res) => {
   try {
     const filter = {};
-    if (req.query.archived !== 'true') filter.isArchived = { $ne: true };
-    if (req.query.status) filter.status = req.query.status;
+
+    if (req.query.archived === 'true') {
+      // Archived vault: show only archived
+      filter.isArchived = true;
+    } else {
+      // Default: exclude archived by BOTH isArchived flag AND status field
+      // This prevents archived employees from appearing if only one field was set
+      filter.isArchived = { $ne: true };
+      filter.status = { $ne: 'archived' };
+    }
+
+    // Optional filters
+    if (req.query.status && req.query.archived !== 'true') {
+      // Only apply status filter if it's a valid non-archived status
+      const validStatuses = ['active', 'inactive', 'terminated'];
+      if (validStatuses.includes(req.query.status)) {
+        filter.status = req.query.status;
+      }
+    }
     if (req.query.department) filter.department = req.query.department;
 
     const employees = await Employee.find(filter)
@@ -21,9 +38,11 @@ exports.getAll = async (req, res) => {
 
     res.json(employees);
   } catch (err) {
+    console.error('Get all employees error:', err);
     res.status(500).json({ message: err.message });
   }
 };
+
 
 /**
  * GET /api/employees/:id
@@ -73,7 +92,7 @@ exports.create = async (req, res) => {
       joiningDate: joiningDate || new Date(),
       employmentType: employmentType || 'full_time',
       salaryStructure: {
-        grossMonthly: Number(grossMonthly) || 0,
+        grossMonthly: (grossMonthly !== undefined && grossMonthly !== '') ? Number(grossMonthly) : 0,
       },
       leaveBalance: {
         casual: Number(leaveCL) || 12,
@@ -162,7 +181,8 @@ exports.update = async (req, res) => {
     if (department) emp.department = department;
     if (joiningDate) emp.joiningDate = joiningDate;
     if (employmentType) emp.employmentType = employmentType;
-    if (grossMonthly !== undefined) emp.salaryStructure.grossMonthly = Number(grossMonthly);
+    // Guard: only update grossMonthly if a real value is provided (not empty string)
+    if (grossMonthly !== undefined && grossMonthly !== '') emp.salaryStructure.grossMonthly = Number(grossMonthly);
     if (leaveCL !== undefined) emp.leaveBalance.casual = Number(leaveCL);
     if (leaveSL !== undefined) emp.leaveBalance.sick = Number(leaveSL);
     if (leaveEL !== undefined) emp.leaveBalance.earned = Number(leaveEL);
