@@ -41,68 +41,7 @@ const GENERIC_COLLECTIONS = [
 ];
 
 async function runArchiveCleanup() {
-  if (mongoose.connection.readyState !== 1) {
-    console.warn('⚠️ [Archive Cleaner] MongoDB is not connected; skipping cleanup.');
-    return;
-  }
-
-  const cutoff = new Date(Date.now() - THIRTY_DAYS_MS);
-  let totalDeleted = 0;
-
-  console.log(`\n🧹 [Archive Cleaner] Starting cleanup — cutoff: ${cutoff.toISOString()}`);
-
-  for (const colName of GENERIC_COLLECTIONS) {
-    try {
-      const Model = getModel(colName);
-      // ROOT CAUSE FIX: Only delete records where archivedAt is EXPLICITLY set and older than 30 days.
-      // REMOVED: updatedAt fallback — it was silently deleting records that were never explicitly archived.
-      // Records with isArchived=true but missing/null archivedAt are KEPT SAFE.
-      const result = await Model.deleteMany({
-        isArchived: true,
-        archivedAt: { $ne: null, $exists: true, $lt: cutoff },
-      });
-      if (result.deletedCount > 0) {
-        console.log(`   ✅ ${colName}: deleted ${result.deletedCount} expired archived records`);
-        totalDeleted += result.deletedCount;
-      }
-    } catch (err) {
-      console.error(`   ⚠️  ${colName}: cleanup failed — ${err.message}`);
-    }
-  }
-
-  // Clean archived employees (via Employee model)
-  try {
-    const Employee = require('../modules/employees/employee.model');
-    // ROOT CAUSE FIX: Only delete if archivedAt is explicitly set (not just updatedAt).
-    const result = await Employee.deleteMany({
-      $or: [{ isArchived: true }, { status: 'archived' }],
-      archivedAt: { $ne: null, $exists: true, $lt: cutoff },
-    });
-    if (result.deletedCount > 0) {
-      console.log(`   ✅ employees: deleted ${result.deletedCount} expired archived records`);
-      totalDeleted += result.deletedCount;
-    }
-  } catch (err) {
-    console.error(`   ⚠️  employees: cleanup failed — ${err.message}`);
-  }
-
-  // Clean archived clients (via Client model)
-  try {
-    const Client = require('../modules/clients/client.model');
-    // ROOT CAUSE FIX: Only delete if archivedAt is explicitly set (not just updatedAt).
-    const result = await Client.deleteMany({
-      $or: [{ isArchived: true }, { status: 'archived' }],
-      archivedAt: { $ne: null, $exists: true, $lt: cutoff },
-    });
-    if (result.deletedCount > 0) {
-      console.log(`   ✅ clients: deleted ${result.deletedCount} expired archived records`);
-      totalDeleted += result.deletedCount;
-    }
-  } catch (err) {
-    console.error(`   ⚠️  clients: cleanup failed — ${err.message}`);
-  }
-
-  console.log(`🧹 [Archive Cleaner] Done. Total deleted: ${totalDeleted}\n`);
+  console.log(`\n🧹 [Archive Cleaner] Skipped. Auto-deletion is explicitly disabled.`);
 }
 
 /**
@@ -110,13 +49,7 @@ async function runArchiveCleanup() {
  * Call this from server.js after DB connects.
  */
 function scheduleArchiveCleanup() {
-  const INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-  // Delay first run by 5 minutes after startup (don't run immediately on boot)
-  setTimeout(() => {
-    runArchiveCleanup();
-    setInterval(runArchiveCleanup, INTERVAL_MS);
-  }, 5 * 60 * 1000);
-  console.log('📅 [Archive Cleaner] Scheduled — first run in 5 min, then every 24h. Only explicit 30-day archived records will be deleted.');
+  console.log('📅 [Archive Cleaner] Auto-deletion is DISABLED as per Super Admin request. No data will be deleted automatically.');
 }
 
 module.exports = { scheduleArchiveCleanup, runArchiveCleanup };

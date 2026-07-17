@@ -12,6 +12,7 @@ router.get('/', async (req, res) => {
     const Model = Att();
     const filter = {};
     if (req.query.month) filter.month = req.query.month;
+    if (req.query.date) filter.date = req.query.date;
     if (req.query.employeeId) filter.employeeId = req.query.employeeId;
     const isAdminRole = ['super_admin', 'admin', 'hr', 'operations_head'].includes(req.user.primaryRole);
 

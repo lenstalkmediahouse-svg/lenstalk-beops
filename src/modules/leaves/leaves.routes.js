@@ -76,6 +76,16 @@ router.post('/', async (req, res) => {
   } catch (err) { res.status(400).json({ message: err.message }); }
 });
 
+
+// GET /api/leaves/archived — returns all archived leave requests (HR/Admin/Super Admin only)
+router.get('/archived', restrictTo('super_admin', 'admin', 'hr'), async (req, res) => {
+  try {
+    const Model = Leaves();
+    const leaves = await Model.find({ isArchived: true }).sort({ archivedAt: -1, createdAt: -1 });
+    res.json(leaves);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
 // HIGH-4 FIX: Added authorization check.
 // Previously any authenticated user could PATCH any leave record including `status: 'approved'`
 // bypassing the dedicated /approve and /reject guarded endpoints.
