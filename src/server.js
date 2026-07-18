@@ -46,6 +46,17 @@ const startServer = async () => {
     } catch (err) {
       console.warn(`⚠️ Archive cleanup scheduling failed: ${err.message}`);
     }
+
+    // Start daily backup cron (11:30 PM IST / 18:00 UTC).
+    // Runs server-side so it's always whitelisted by Atlas — no Mac dependency.
+    // On failure: writes BACKUP_FAILED to audit log + console.error
+    // (configure Render log-based alert on "BACKUP_FAILED" to get notified).
+    try {
+      const { startBackupCron } = require('./cron/backupCron');
+      startBackupCron();
+    } catch (err) {
+      console.warn(`⚠️ Backup cron scheduling failed: ${err.message}`);
+    }
   } catch (err) {
     // Log the error but do NOT exit — the 503 middleware in app.js
     // will reject API calls until DB reconnects. Render keeps the

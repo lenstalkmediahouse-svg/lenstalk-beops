@@ -244,6 +244,7 @@ router.post('/', authenticate, async (req, res) => {
 /**
  * PUT /api/users/:id
  * Update user (admin only)
+ * SECURITY: primaryRole can only be changed by super_admin — prevents privilege escalation.
  */
 router.put('/:id', authenticate, async (req, res) => {
   try {
@@ -259,7 +260,16 @@ router.put('/:id', authenticate, async (req, res) => {
     if (name) user.name = name;
     if (email) user.email = email;
     if (loginId) user.loginId = loginId;
-    if (primaryRole) user.primaryRole = primaryRole;
+
+    // SECURITY: Only super_admin can promote/change primaryRole — prevents privilege escalation
+    if (primaryRole) {
+      if (req.user.primaryRole !== 'super_admin') {
+        return res.status(403).json({ message: 'Forbidden: Only Super Admin can change a user\'s primary role.' });
+      }
+      user.primaryRole = primaryRole;
+    }
+
+    // accessRoles is FE-only (sidebar/workspace panels) — admin can update it freely
     if (accessRoles) user.accessRoles = accessRoles;
     if (status) user.status = status;
     if (isActive !== undefined) user.isActive = isActive;

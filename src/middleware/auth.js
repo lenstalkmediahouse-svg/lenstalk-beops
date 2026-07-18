@@ -60,7 +60,15 @@ const authorize = (...requiredPermissions) => {
 };
 
 /**
- * Restrict to specific roles
+ * Restrict to specific roles — checks ONLY primaryRole.
+ *
+ * SECURITY FIX: accessRoles is a free-text array used by the frontend for
+ * sidebar/workspace panel visibility. It has no enum validation and must NOT
+ * be used for server-side authorization — an admin could accidentally (or
+ * maliciously) add "super_admin" to accessRoles and bypass guards.
+ *
+ * Only req.user.primaryRole is authoritative for backend permissions.
+ *
  * Usage: restrictTo('admin', 'super_admin')
  */
 const restrictTo = (...roles) => {
@@ -69,9 +77,8 @@ const restrictTo = (...roles) => {
       return res.status(401).json({ message: 'Not authenticated.' });
     }
 
-    // Check primary role OR any access role
-    const userRoles = [req.user.primaryRole, ...(req.user.accessRoles || [])];
-    const hasRole = roles.some((role) => userRoles.includes(role));
+    // SECURITY: Only primaryRole is checked — accessRoles is FE-only (workspace panels)
+    const hasRole = roles.some((role) => role === req.user.primaryRole);
 
     if (!hasRole) {
       return res.status(403).json({ message: 'Forbidden. Insufficient role.' });

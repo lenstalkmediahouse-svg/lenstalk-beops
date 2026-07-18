@@ -322,11 +322,31 @@ exports.remove = async (req, res) => {
 
     if (req.query.permanent === 'true') {
       // ZERO DATA LOSS — Permanent delete: SUPER ADMIN ONLY
+      // This branch is reached only when route-level restrictTo('super_admin') passes.
       if (req.user?.primaryRole !== 'super_admin') {
         return res.status(403).json({
           message: 'Forbidden: Permanent delete is restricted to Super Admin only via Archive Vault.'
         });
       }
+
+      // FIX (P3 — Orphan Cascade): Before deleting the employee, soft-archive all
+      // linked records so they remain visible in Archive Vault (not silently lost).
+      // Mirror the same pattern used in clients.routes.js permanent-delete branch.
+      const empId = emp._id;
+      const orphanMeta = {
+        isArchived: true,
+        archivedAt: new Date(),
+        archivedReason: `Orphaned: Parent employee permanently deleted (${emp.fullName} / ${emp.employeeCode})`
+      };
+      await Promise.allSettled([
+        getModel('lenstalk_hr_documents_v1').updateMany({ employeeId: empId }, orphanMeta),
+        getModel('leave_requests').updateMany({ employeeId: empId }, orphanMeta),
+        getModel('attendance_records').updateMany({ employeeId: empId }, orphanMeta),
+        getModel('dprs').updateMany({ employeeId: empId }, orphanMeta),
+        getModel('salary_slips').updateMany({ employeeId: empId }, orphanMeta),
+      ]);
+
+      // Delete linked login account
       if (emp.userId) {
         await User.findByIdAndDelete(emp.userId);
       } else {
@@ -337,31 +357,23 @@ exports.remove = async (req, res) => {
       auditLog.write({
         action: 'DATA_PERM_DELETE',
         actor: req.user?.name || req.user?.loginId || 'Super Admin',
-        details: `PERMANENT DELETE employee: ${emp.fullName} (${emp.employeeCode}) | ID: ${emp._id}`,
+        details: `PERMANENT DELETE employee: ${emp.fullName} (${emp.employeeCode}) | ID: ${emp._id} | Orphan cascade: HR docs, leaves, attendance, DPR, salary archived.`,
         module: 'HR System',
         ip: req.ip || '—',
       });
-      return res.json({ message: 'Employee permanently deleted.' });
+      return res.json({ message: 'Employee permanently deleted. All linked records archived for audit trail.' });
     }
 
-    // Soft delete linked user if present
-    if (emp.userId) {
-      await User.findByIdAndUpdate(emp.userId, { isActive: false, status: 'inactive' });
-    } else {
-      await User.updateMany({ linkedEmployeeId: emp._id }, { isActive: false, status: 'inactive' });
-    }
-
-    await Employee.findByIdAndUpdate(req.params.id, { isArchived: true, archivedAt: new Date().toISOString(), status: 'archived' });
-
-    auditLog.write({
-      action: 'DATA_ARCHIVE',
-      actor: req.user?.name || req.user?.loginId || 'Unknown',
-      details: `Archived employee: ${emp.fullName} (${emp.employeeCode}) | ID: ${emp._id}`,
-      module: 'HR System',
-      ip: req.ip || '—',
-    });
-
-    res.json({ message: 'Employee safely archived (Zero Data Loss Policy enforced).' });
+    // NOTE (Fix 5 — dead code removed): The soft-archive path that previously existed
+    // here was unreachable. This route is guarded by restrictTo('super_admin') at the
+    // router level (employee.routes.js line 16), so HR/Admin never reaches this function.
+    // HR/Admin archiving goes through POST /:id/archive → exports.archive (a separate
+    // function that correctly cascade-archives HR docs, leave requests, etc.)
+    //
+    // If a non-super_admin somehow reaches here, the ?permanent check above would fail,
+    // and this code returns 403 from the inner guard — so we're safe. But in practice
+    // this function is only ever called with ?permanent=true by super_admin.
+    return res.status(400).json({ message: 'Missing ?permanent=true parameter. For archiving, use POST /api/employees/:id/archive.' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
