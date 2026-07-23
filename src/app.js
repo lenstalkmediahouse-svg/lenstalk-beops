@@ -70,6 +70,7 @@ const corsOptions = {
       return callback(null, true);
     }
     const isAllowed = ALLOWED_ORIGINS.includes(origin) ||
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin) ||
       /^https?:\/\/(?:[a-z0-9-]+\.)*lenstalkmedia\.com$/i.test(origin);
     if (isAllowed) {
       return callback(null, true);

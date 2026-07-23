@@ -38,6 +38,7 @@ userSchema.index({ employeeCode: 1 }, { sparse: true }); // sparse = only index 
 // Password hashing pre-save
 userSchema.pre('save', async function () {
   if (!this.isModified('passwordHash')) return;
+  if (typeof this.passwordHash === 'string' && (this.passwordHash.startsWith('$2a$') || this.passwordHash.startsWith('$2b$'))) return;
   const salt = await bcrypt.genSalt(12);
   this.passwordHash = await bcrypt.hash(this.passwordHash, salt);
 });
