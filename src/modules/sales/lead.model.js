@@ -30,6 +30,7 @@ const leadSchema = new mongoose.Schema(
     // Core lead info
     companyName:   { type: String, required: true, trim: true },
     contactPerson: { type: String, trim: true },
+    email:         { type: String, trim: true, default: null },
     phone:         { type: String, required: true, trim: true },
     source: {
       type:    String,
