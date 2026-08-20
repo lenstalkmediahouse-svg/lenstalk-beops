@@ -48,7 +48,25 @@ const demoUsers = [
     password: config.passwords.emp || 'LenstalkEmployee@2026',
     primaryRole: 'employee',
     accessRoles: ['employee'],
-  }
+  },
+  {
+    name: 'Sales Executive Demo',
+    email: 'sales@lenstalkmedia.com',
+    mobile: '+91-9999999994',
+    loginId: 'sales_exec',
+    password: config.passwords.sales || 'LenstalkSales@2026',
+    primaryRole: 'sales_executive',
+    accessRoles: ['sales_executive', 'Sales'],
+  },
+  {
+    name: 'Telecaller Demo',
+    email: 'telecaller@lenstalkmedia.com',
+    mobile: '+91-9999999993',
+    loginId: 'telecaller',
+    password: config.passwords.telecaller || 'LenstalkTelecaller@2026',
+    primaryRole: 'telecaller',
+    accessRoles: ['telecaller', 'Sales'],
+  },
 ];
 
 mongoose.connect(config.mongoUri)

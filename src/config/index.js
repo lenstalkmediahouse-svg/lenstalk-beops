@@ -27,6 +27,8 @@ module.exports = {
     emp: process.env.DEMO_EMPLOYEE_PASSWORD || (isProduction ? undefined : 'LenstalkEmployee@2026'),
     cinema: process.env.DEMO_CINEMATOGRAPHER_PASSWORD || (isProduction ? undefined : 'LenstalkCinema@2026'),
     client: process.env.DEMO_CLIENT_PASSWORD || (isProduction ? undefined : 'LenstalkClient@2026'),
+    sales: process.env.DEMO_SALES_PASSWORD || (isProduction ? undefined : 'LenstalkSales@2026'),
+    telecaller: process.env.DEMO_TELECALLER_PASSWORD || (isProduction ? undefined : 'LenstalkTelecaller@2026'),
   }
 };
 

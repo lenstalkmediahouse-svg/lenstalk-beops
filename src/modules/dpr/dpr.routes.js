@@ -56,7 +56,7 @@ router.post('/', async (req, res) => {
       submitter = `${req.user.name} (HR)`; // Add label as requested
     }
 
-    const doc = new Model({ ...req.body, userId: targetUserId, submittedBy: submitter });
+    const doc = new Model({ ...req.body, userId: targetUserId, submittedBy: submitter, submittedAt: new Date() });
     await doc.save();
     res.status(201).json(doc);
   } catch (err) { res.status(400).json({ message: err.message }); }

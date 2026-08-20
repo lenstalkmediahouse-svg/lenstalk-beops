@@ -44,17 +44,17 @@ const COLLECTION_ACCESS = {
   lenstalk_documents_v2:      ['super_admin', 'admin', 'operations_head', 'hr', 'ads_manager_creators', 'Document Generator'],
 
   // OPS & Personal Tasks — smm can read tasks (brand-filtered in controller)
-  lenstalk_ops_tasks_v1:      ['super_admin', 'admin', 'operations_head', 'hr', 'employee', 'cinematographer', 'ads_manager_creators', 'smm', 'Operations', 'HR System', 'Employee Workspace (With My Shoots)', 'Employee Workspace (Without My Shoots)', 'Ads & Creators'],
-  lenstalk_personal_tasks_v1: ['super_admin', 'admin', 'operations_head', 'hr', 'employee', 'cinematographer', 'ads_manager_creators', 'smm', 'Employee Workspace (With My Shoots)', 'Employee Workspace (Without My Shoots)'],
+  lenstalk_ops_tasks_v1:      ['super_admin', 'admin', 'operations_head', 'hr', 'employee', 'cinematographer', 'ads_manager_creators', 'smm', 'sales_executive', 'telecaller', 'Operations', 'HR System', 'Employee Workspace (With My Shoots)', 'Employee Workspace (Without My Shoots)', 'Ads & Creators'],
+  lenstalk_personal_tasks_v1: ['super_admin', 'admin', 'operations_head', 'hr', 'employee', 'cinematographer', 'ads_manager_creators', 'smm', 'sales_executive', 'telecaller', 'Employee Workspace (With My Shoots)', 'Employee Workspace (Without My Shoots)'],
 
   // Notifications — all authenticated users can read their own
-  lenstalk_notifications_v1:  ['super_admin', 'admin', 'hr', 'operations_head', 'employee', 'cinematographer', 'ads_manager_creators', 'client', 'smm'],
+  lenstalk_notifications_v1:  ['super_admin', 'admin', 'hr', 'operations_head', 'employee', 'cinematographer', 'ads_manager_creators', 'client', 'smm', 'sales_executive', 'telecaller'],
 
   // Audit Logs — admin/super_admin only (read-only via UI, write via system)
   lenstalk_audit_logs_v1:     ['super_admin', 'admin', 'Admin'],
 
   // Settings — all authenticated roles can read company settings
-  lenstalk_company_settings:  ['super_admin', 'admin', 'hr', 'operations_head', 'employee', 'cinematographer', 'ads_manager', 'ads_creators', 'client', 'smm'],
+  lenstalk_company_settings:  ['super_admin', 'admin', 'hr', 'operations_head', 'employee', 'cinematographer', 'ads_manager', 'ads_creators', 'client', 'smm', 'sales_executive', 'telecaller'],
 
   // Credentials — admin only (sensitive data)
   lenstalk_credentials_v1:    ['super_admin', 'admin'],

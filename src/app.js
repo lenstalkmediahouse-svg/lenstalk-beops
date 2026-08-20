@@ -35,6 +35,8 @@ const integrityRoutes = require('./modules/integrity/integrity.routes');
 const performanceRoutes = require('./modules/performance/performance.routes');
 // HR Daily Reports Module
 const hrReportRoutes = require('./modules/hr-reports/hrReport.routes');
+// Sales Module
+const salesRoutes = require('./modules/sales/sales.routes');
 
 const app = express();
 
@@ -131,6 +133,7 @@ app.use('/api/data',                  genericRoutes); // Generic router for misc
 app.use('/api/integrity',             integrityRoutes); // Data integrity health checks (Super Admin only)
 app.use('/api/performance',           performanceRoutes); // KPI & employee performance scoring
 app.use('/api/hr-reports',            hrReportRoutes);   // HR daily consolidated reports
+app.use('/api/sales',                 salesRoutes);      // Sales pipeline module
 
 // ── Public: Influencer Self-Registration (no auth required) ──────────────────
 const getGenericModel = require('./modules/generic/generic.model');

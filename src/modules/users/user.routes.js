@@ -213,7 +213,7 @@ router.post('/', authenticate, async (req, res) => {
 
     // MED-9 FIX: Only auto-create Employee record for roles that are actual HR staff.
     // Previously this ran for accountant, prm, smm etc., cluttering the HR employee list.
-    const EMPLOYEE_ROLES = ['employee', 'cinematographer', 'hr', 'operations_head', 'ads_manager_creators'];
+    const EMPLOYEE_ROLES = ['employee', 'cinematographer', 'hr', 'operations_head', 'ads_manager_creators', 'sales_executive', 'telecaller'];
     if (EMPLOYEE_ROLES.includes(primaryRole)) {
       // Use the provided employeeCode if available, else use loginId as fallback
       const empCode = (employeeCode ? employeeCode.trim().toUpperCase() : null) || loginId;

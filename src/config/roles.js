@@ -22,6 +22,8 @@ const ROLES = {
   ACCOUNTANT:         'accountant',
   SMM:                'smm',
   PRM:                'prm',
+  SALES_EXECUTIVE:    'sales_executive',
+  TELECALLER:         'telecaller',
 };
 
 const PERMISSIONS = {
@@ -97,6 +99,10 @@ const PERMISSIONS = {
   // PRM
   PRM_READ:   'prm.read',
   PRM_WRITE:  'prm.write',
+
+  // Sales
+  SALES_READ:  'sales.read',
+  SALES_WRITE: 'sales.write',
 
   // Admin (available to admin + super_admin)
   AUDIT_READ:       'audit.read',
@@ -240,6 +246,18 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.PRM_READ,
     PERMISSIONS.PRM_WRITE,
   ],
+
+  // Sales Executive — pre-sale pipeline management
+  [ROLES.SALES_EXECUTIVE]: [
+    PERMISSIONS.SALES_READ,
+    PERMISSIONS.SALES_WRITE,
+  ],
+
+  // Telecaller — outbound calling & lead qualification
+  [ROLES.TELECALLER]: [
+    PERMISSIONS.SALES_READ,
+    PERMISSIONS.SALES_WRITE,
+  ],
 };
 
 /**
@@ -259,6 +277,8 @@ const ROLE_NAV_SECTIONS = {
   [ROLES.ACCOUNTANT]:           ['dashboard', 'accounts', 'employee'],
   [ROLES.SMM]:                  ['dashboard', 'operations', 'employee'],
   [ROLES.PRM]:                  ['dashboard', 'prm', 'employee'],
+  [ROLES.SALES_EXECUTIVE]:      ['dashboard', 'sales', 'employee'],
+  [ROLES.TELECALLER]:           ['dashboard', 'sales', 'employee'],
 };
 
 module.exports = { ROLES, PERMISSIONS, ROLE_PERMISSIONS, ROLE_NAV_SECTIONS };

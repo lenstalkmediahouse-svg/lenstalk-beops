@@ -15,8 +15,9 @@ router.get('/', async (req, res) => {
     const filter = {};
     if (req.query.month) filter.month = req.query.month;
     if (req.query.employeeId) filter.employeeId = req.query.employeeId;
-    // Employees only see their own slips
-    if (!['super_admin', 'admin', 'hr'].includes(req.user.primaryRole)) {
+    // Employees only see their own slips; accountants see all (read-only ledger view)
+    const FULL_READ_ROLES = ['super_admin', 'admin', 'hr', 'accountant'];
+    if (!FULL_READ_ROLES.includes(req.user.primaryRole)) {
       filter.userId = req.user._id.toString();
     }
     // Archive Vault: include archived; normal view: exclude archived
