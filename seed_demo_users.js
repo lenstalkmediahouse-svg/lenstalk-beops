@@ -10,17 +10,17 @@ const demoUsers = [
     mobile: '+91-9999999999',
     loginId: 'admin',
     password: config.passwords.admin || 'LenstalkAdmin@2026',
-    primaryRole: 'admin',
-    accessRoles: ['admin', 'hr', 'operations_head', 'ads_manager', 'employee'],
+    primaryRole: 'super_admin',   // Owner's main account — SUPER ADMIN
+    accessRoles: ['super_admin', 'admin', 'hr', 'operations_head', 'ads_manager', 'employee', 'accountant'],
   },
   {
-    name: 'Super Admin',
+    name: 'Super Admin (Seed)',
     email: 'superadmin@lenstalkmedia.com',
     mobile: '+91-9999999998',
     loginId: 'superadmin',
     password: 'LenstalkAdmin@2026',
-    primaryRole: 'super_admin',
-    accessRoles: ['super_admin', 'admin', 'hr', 'operations_head', 'ads_manager', 'employee'],
+    primaryRole: 'admin',         // Demoted — use loginId:admin instead
+    accessRoles: ['admin'],
   },
   {
     name: 'HR Manager',
