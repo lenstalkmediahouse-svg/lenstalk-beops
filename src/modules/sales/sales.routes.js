@@ -11,18 +11,24 @@ const { authenticate } = require('../../middleware/auth');
 router.use(authenticate);
 
 // Leads list (role-scoped in controller)
-router.get('/',        ctrl.getLeads);
+router.get('/',                         ctrl.getLeads);
+// Archived leads vault (admin/super_admin only) — MUST be before /:id
+router.get('/archived',                 ctrl.getArchived);
 // Single lead
-router.get('/:id',     ctrl.getLeadById);
+router.get('/:id',                      ctrl.getLeadById);
 // Create lead
-router.post('/',       ctrl.createLead);
+router.post('/',                        ctrl.createLead);
 // Basic field edits
-router.patch('/:id',   ctrl.updateLead);
+router.patch('/:id',                    ctrl.updateLead);
 // Stage transition
-router.post('/:id/transition', ctrl.transitionStage);
+router.post('/:id/transition',          ctrl.transitionStage);
 // Account clearance approve/reject (accountant or admin only — enforced in controller)
-router.post('/:id/account-clearance', ctrl.approveClearance);
+router.post('/:id/account-clearance',   ctrl.approveClearance);
+// Restore archived lead (admin/super_admin)
+router.post('/:id/restore',             ctrl.restoreLead);
+// Permanent delete — super_admin only
+router.delete('/:id/permanent',         ctrl.permanentDelete);
 // Soft-archive (isArchived: true)
-router.delete('/:id',  ctrl.archiveLead);
+router.delete('/:id',                   ctrl.archiveLead);
 
 module.exports = router;

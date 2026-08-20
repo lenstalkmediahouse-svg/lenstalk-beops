@@ -328,7 +328,7 @@ exports.transitionStage = async (req, res) => {
   }
 };
 
-// ── DELETE /api/sales/leads/:id ───────────────────────────────────────────────
+// ── DELETE /api/sales/:id  →  soft-archive ────────────────────────────────────
 exports.archiveLead = async (req, res) => {
   try {
     if (!checkAccess(req, res)) return;
@@ -341,6 +341,64 @@ exports.archiveLead = async (req, res) => {
     res.json({ message: 'Lead archived.', lead });
   } catch (err) {
     console.error('[Sales] archiveLead error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// ── GET /api/sales/archived  →  archived leads list (admin/super_admin only) ──
+exports.getArchived = async (req, res) => {
+  try {
+    const role = req.user?.primaryRole;
+    if (!['super_admin', 'admin'].includes(role)) {
+      return res.status(403).json({ message: 'Admin access required.' });
+    }
+    const leads = await Lead.find({ isArchived: true })
+      .populate('assignedToId', 'name')
+      .populate('createdById',  'name')
+      .sort({ archivedAt: -1 });
+    res.json(leads);
+  } catch (err) {
+    console.error('[Sales] getArchived error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// ── POST /api/sales/:id/restore  →  undo archive ──────────────────────────────
+exports.restoreLead = async (req, res) => {
+  try {
+    const role = req.user?.primaryRole;
+    if (!['super_admin', 'admin'].includes(role)) {
+      return res.status(403).json({ message: 'Admin access required.' });
+    }
+    const lead = await Lead.findByIdAndUpdate(
+      req.params.id,
+      { isArchived: false, archivedAt: null },
+      { new: true }
+    );
+    if (!lead) return res.status(404).json({ message: 'Lead not found.' });
+    res.json({ message: 'Lead restored.', lead });
+  } catch (err) {
+    console.error('[Sales] restoreLead error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// ── DELETE /api/sales/:id/permanent  →  hard-delete (super_admin only) ────────
+exports.permanentDelete = async (req, res) => {
+  try {
+    const role = req.user?.primaryRole;
+    if (role !== 'super_admin') {
+      return res.status(403).json({ message: 'Only Super Admin can permanently delete leads.' });
+    }
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ message: 'Lead not found.' });
+    if (!lead.isArchived) {
+      return res.status(400).json({ message: 'Lead must be archived before permanent deletion.' });
+    }
+    await Lead.findByIdAndDelete(req.params.id);
+    res.json({ message: `Lead "${lead.companyName}" permanently deleted.` });
+  } catch (err) {
+    console.error('[Sales] permanentDelete error:', err);
     res.status(500).json({ message: 'Server error.' });
   }
 };
