@@ -66,6 +66,8 @@ const COLLECTION_ACCESS = {
   lenstalk_account_logs_v1:   ['super_admin', 'admin', 'accountant', 'Accounts', 'Admin', 'Super Admin'],
   // Accounts — Account Slips (project expense sheets)
   lenstalk_account_slips_v1:  ['super_admin', 'admin', 'accountant', 'Accounts', 'Admin', 'Super Admin'],
+  // Salaries — HR and Accounts
+  lenstalk_salaries_v1:       ['super_admin', 'admin', 'hr', 'accountant', 'HR System', 'Accounts', 'Admin', 'Super Admin'],
 };
 
 // H-4 middleware: check that the user's role is allowed for this collection
