@@ -2,6 +2,7 @@
  * Lenstalk OS — Sales Module Controller
  * Handles all lead CRUD + stage transitions + WON auto-client-creation.
  */
+const mongoose      = require('mongoose');
 const Lead            = require('./lead.model');
 const { STAGES }      = require('./lead.model');
 const Client          = require('../clients/client.model');
@@ -105,12 +106,17 @@ exports.getLeads = async (req, res) => {
 
     if (stage && STAGES.includes(stage)) filter.stage = stage;
 
-    // Category filter
+    // Category filter — cast string to ObjectId for proper matching
     if (categoryId) {
       if (categoryId === 'uncategorized') {
         filter.categoryId = null;
       } else {
-        filter.categoryId = categoryId;
+        try {
+          filter.categoryId = new mongoose.Types.ObjectId(categoryId);
+        } catch {
+          // invalid id — no results
+          return res.json([]);
+        }
       }
     }
 
@@ -164,7 +170,8 @@ exports.createLead = async (req, res) => {
   try {
     if (!checkAccess(req, res)) return;
     const {
-      companyName, contactPerson, phone, source,
+      companyName, contactPerson, email, phone, source,
+      categoryId,
       assignedToId, nextFollowUpDate, meetingDate,
       meetingStatus, meetingNotes, proposalAmount, proposalFileUrl, proposalStatus,
     } = req.body;
@@ -173,14 +180,15 @@ exports.createLead = async (req, res) => {
     if (!phone?.trim())       return res.status(400).json({ message: 'Phone number is required.' });
 
     const role = req.user?.primaryRole;
-    // Auto-assign to self for field sales roles
     const selfAssign = ['sales_executive', 'telecaller'].includes(role);
 
     const lead = await Lead.create({
       companyName: companyName.trim(),
       contactPerson: contactPerson?.trim() || '',
+      email: email?.trim() || null,
       phone: phone.trim(),
       source: source || 'Manual',
+      categoryId: categoryId || null,
       assignedToId: assignedToId || (selfAssign ? req.user._id : null),
       nextFollowUpDate: nextFollowUpDate || null,
       meetingDate: meetingDate || null,
@@ -225,7 +233,8 @@ exports.updateLead = async (req, res) => {
 
     // Only admins can re-assign a lead to someone else
     const EDITABLE = [
-      'companyName', 'contactPerson', 'phone', 'source',
+      'companyName', 'contactPerson', 'email', 'phone', 'source',
+      'categoryId',
       'nextFollowUpDate', 'meetingDate', 'meetingStatus', 'meetingNotes',
       'proposalAmount', 'proposalFileUrl', 'proposalStatus',
     ];
