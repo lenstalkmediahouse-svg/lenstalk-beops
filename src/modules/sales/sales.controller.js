@@ -2,9 +2,10 @@
  * Lenstalk OS — Sales Module Controller
  * Handles all lead CRUD + stage transitions + WON auto-client-creation.
  */
-const Lead          = require('./lead.model');
-const { STAGES }    = require('./lead.model');
-const Client        = require('../clients/client.model');
+const Lead            = require('./lead.model');
+const { STAGES }      = require('./lead.model');
+const Client          = require('../clients/client.model');
+const LeadCategory    = require('./leadCategory.model');
 const getGenericModel = require('../generic/generic.model');
 
 const ALLOWED_ROLES = ['super_admin', 'admin', 'sales_executive', 'telecaller'];
@@ -87,16 +88,15 @@ async function _onWon(lead, byUserId) {
   }
 }
 
-// ── GET /api/sales/leads ──────────────────────────────────────────────────────
+// ── GET /api/sales ────────────────────────────────────────────────────────────
 exports.getLeads = async (req, res) => {
   try {
     if (!checkAccess(req, res)) return;
-    const { stage, search } = req.query;
+    const { stage, search, categoryId } = req.query;
 
     const filter = { isArchived: { $ne: true } };
 
     // Role-scoped: sales_executive / telecaller see only their own leads
-    // (either assigned to them OR created by them)
     if (!isAdminViewer(req)) {
       filter.$and = [
         { $or: [{ assignedToId: req.user._id }, { createdById: req.user._id }] },
@@ -104,6 +104,16 @@ exports.getLeads = async (req, res) => {
     }
 
     if (stage && STAGES.includes(stage)) filter.stage = stage;
+
+    // Category filter
+    if (categoryId) {
+      if (categoryId === 'uncategorized') {
+        filter.categoryId = null;
+      } else {
+        filter.categoryId = categoryId;
+      }
+    }
+
     if (search) {
       const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const searchOr = [
@@ -111,17 +121,14 @@ exports.getLeads = async (req, res) => {
         { contactPerson: { $regex: escaped, $options: 'i' } },
         { leadCode:      { $regex: escaped, $options: 'i' } },
       ];
-      // Merge with existing $and if scope is active, else set directly
-      if (filter.$and) {
-        filter.$and.push({ $or: searchOr });
-      } else {
-        filter.$or = searchOr;
-      }
+      if (filter.$and) filter.$and.push({ $or: searchOr });
+      else filter.$or = searchOr;
     }
 
     const leads = await Lead.find(filter)
       .populate('assignedToId', 'name email')
-      .populate('createdById', 'name')
+      .populate('createdById',  'name')
+      .populate('categoryId',   'name color')
       .sort({ createdAt: -1 });
 
     res.json(leads);
@@ -355,6 +362,7 @@ exports.getArchived = async (req, res) => {
     const leads = await Lead.find({ isArchived: true })
       .populate('assignedToId', 'name')
       .populate('createdById',  'name')
+      .populate('categoryId',   'name color')
       .sort({ archivedAt: -1 });
     res.json(leads);
   } catch (err) {
@@ -465,5 +473,252 @@ exports.approveClearance = async (req, res) => {
   } catch (err) {
     console.error('[Sales] approveClearance error:', err);
     res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LEAD CATEGORIES — Folder system for organising leads
+// ══════════════════════════════════════════════════════════════════════════════
+
+// GET /api/sales/categories
+exports.getCategories = async (req, res) => {
+  try {
+    if (!checkAccess(req, res)) return;
+    const cats = await LeadCategory.find({ isArchived: false }).sort({ name: 1 });
+
+    // Attach lead counts
+    const ids  = cats.map(c => c._id);
+    const aggr = await Lead.aggregate([
+      { $match: { isArchived: { $ne: true }, categoryId: { $in: ids } } },
+      { $group: { _id: '$categoryId', count: { $sum: 1 } } },
+    ]);
+    const countMap = {};
+    aggr.forEach(a => { countMap[String(a._id)] = a.count; });
+
+    const result = cats.map(c => ({
+      ...c.toObject(),
+      leadCount: countMap[String(c._id)] || 0,
+    }));
+    res.json(result);
+  } catch (err) {
+    console.error('[Sales] getCategories error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// POST /api/sales/categories
+exports.createCategory = async (req, res) => {
+  try {
+    if (!checkAccess(req, res)) return;
+    const { name, color, description } = req.body;
+    if (!name?.trim()) return res.status(400).json({ message: 'Category name is required.' });
+
+    const cat = await LeadCategory.create({
+      name: name.trim(),
+      color: color || '#6366F1',
+      description,
+      createdById: req.user._id,
+    });
+    cat._doc.leadCount = 0;
+    res.status(201).json(cat);
+  } catch (err) {
+    console.error('[Sales] createCategory error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// PATCH /api/sales/categories/:id
+exports.updateCategory = async (req, res) => {
+  try {
+    if (!checkAccess(req, res)) return;
+    const { name, color, description } = req.body;
+    const update = {};
+    if (name  !== undefined) update.name  = name.trim();
+    if (color !== undefined) update.color = color;
+    if (description !== undefined) update.description = description;
+
+    const cat = await LeadCategory.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
+    if (!cat) return res.status(404).json({ message: 'Category not found.' });
+    res.json(cat);
+  } catch (err) {
+    console.error('[Sales] updateCategory error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// DELETE /api/sales/categories/:id  → soft-delete; leads become uncategorized
+exports.deleteCategory = async (req, res) => {
+  try {
+    if (!checkAccess(req, res)) return;
+    if (!isAdminViewer(req)) {
+      return res.status(403).json({ message: 'Admin access required to delete categories.' });
+    }
+    await LeadCategory.findByIdAndUpdate(req.params.id, { isArchived: true });
+    // Uncategorize all leads in this category
+    await Lead.updateMany({ categoryId: req.params.id }, { $set: { categoryId: null } });
+    res.json({ message: 'Category deleted. Leads moved to Uncategorized.' });
+  } catch (err) {
+    console.error('[Sales] deleteCategory error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CSV EXPORT / IMPORT
+// ══════════════════════════════════════════════════════════════════════════════
+
+// GET /api/sales/export  →  download all active leads as CSV
+exports.exportCSV = async (req, res) => {
+  try {
+    if (!checkAccess(req, res)) return;
+    const filter = { isArchived: { $ne: true } };
+    if (!isAdminViewer(req)) {
+      filter.$or = [{ assignedToId: req.user._id }, { createdById: req.user._id }];
+    }
+
+    const leads = await Lead.find(filter)
+      .populate('assignedToId', 'name')
+      .populate('categoryId',   'name')
+      .sort({ createdAt: -1 });
+
+    const esc = (v) => {
+      const s = v == null ? '' : String(v);
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+    const fmt = (d) => d ? new Date(d).toLocaleDateString('en-IN') : '';
+
+    const header = ['Lead Code','Company Name','Contact Person','Email','Phone','Source',
+                    'Stage','Category','Assigned To','Proposal Amount','Follow-up Date','Created At'];
+
+    const rows = leads.map(l => [
+      l.leadCode, l.companyName, l.contactPerson, l.email, l.phone, l.source,
+      l.stage, l.categoryId?.name || '', l.assignedToId?.name || '',
+      l.proposalAmount || '', fmt(l.nextFollowUpDate), fmt(l.createdAt),
+    ].map(esc).join(','));
+
+    const csv = [header.join(','), ...rows].join('\r\n');
+    const date = new Date().toISOString().slice(0, 10);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="leads_${date}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    console.error('[Sales] exportCSV error:', err);
+    res.status(500).json({ message: 'Export failed.' });
+  }
+};
+
+// POST /api/sales/import  →  import leads from CSV text (no multer needed)
+exports.importCSV = async (req, res) => {
+  try {
+    if (!checkAccess(req, res)) return;
+    const { csvText } = req.body;
+    if (!csvText) return res.status(400).json({ message: 'csvText is required.' });
+
+    // Simple CSV parser (handles quoted fields)
+    const parseCSVRow = (line) => {
+      const result = [];
+      let cur = '', inQuote = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuote && line[i + 1] === '"') { cur += '"'; i++; }
+          else { inQuote = !inQuote; }
+        } else if (ch === ',' && !inQuote) {
+          result.push(cur.trim()); cur = '';
+        } else {
+          cur += ch;
+        }
+      }
+      result.push(cur.trim());
+      return result;
+    };
+
+    const lines = csvText.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return res.status(400).json({ message: 'CSV is empty or has no data rows.' });
+
+    const headerRow = parseCSVRow(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, ''));
+    const getIdx = (...names) => {
+      for (const n of names) {
+        const i = headerRow.indexOf(n);
+        if (i !== -1) return i;
+      }
+      return -1;
+    };
+
+    const colCompany     = getIdx('companyname', 'company');
+    const colPhone       = getIdx('phone', 'mobile');
+    const colContact     = getIdx('contactperson', 'contact');
+    const colEmail       = getIdx('email');
+    const colSource      = getIdx('source');
+    const colStage       = getIdx('stage');
+    const colProposal    = getIdx('proposalamount', 'amount');
+    const colFollowup    = getIdx('follow-update', 'followupdate', 'nextfollowup');
+
+    if (colCompany === -1 || colPhone === -1) {
+      return res.status(400).json({ message: 'CSV must have "Company Name" and "Phone" columns.' });
+    }
+
+    const VALID_SOURCES = ['Manual', 'Referral', 'Instagram/Facebook', 'Walk-in', 'Other'];
+
+    let created = 0, skipped = 0;
+    const errors = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const row = parseCSVRow(lines[i]);
+      const company = row[colCompany] || '';
+      const phone   = row[colPhone]   || '';
+
+      if (!company || !phone) {
+        errors.push(`Row ${i + 1}: Missing company or phone — skipped.`);
+        skipped++;
+        continue;
+      }
+
+      // Skip duplicates by phone
+      const exists = await Lead.findOne({ phone });
+      if (exists) {
+        errors.push(`Row ${i + 1}: Phone ${phone} already exists (${exists.leadCode}) — skipped.`);
+        skipped++;
+        continue;
+      }
+
+      let source = 'Manual';
+      if (colSource !== -1) {
+        const s = row[colSource] || '';
+        if (VALID_SOURCES.includes(s)) source = s;
+      }
+
+      let stage = 'NEW_LEAD';
+      if (colStage !== -1 && STAGES.includes(row[colStage])) stage = row[colStage];
+
+      const payload = {
+        companyName:   company,
+        phone,
+        contactPerson: colContact  !== -1 ? row[colContact]  : undefined,
+        email:         colEmail    !== -1 ? row[colEmail]     : undefined,
+        source,
+        stage,
+        proposalAmount: colProposal !== -1 && row[colProposal] ? Number(row[colProposal]) || null : null,
+        nextFollowUpDate: colFollowup !== -1 && row[colFollowup] ? new Date(row[colFollowup]) : null,
+        createdById: req.user._id,
+      };
+
+      try {
+        await Lead.create(payload);
+        created++;
+      } catch (createErr) {
+        errors.push(`Row ${i + 1}: ${createErr.message}`);
+        skipped++;
+      }
+    }
+
+    res.json({ created, skipped, errors });
+  } catch (err) {
+    console.error('[Sales] importCSV error:', err);
+    res.status(500).json({ message: 'Import failed.' });
   }
 };

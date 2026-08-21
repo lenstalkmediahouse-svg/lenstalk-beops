@@ -40,6 +40,7 @@ const leadSchema = new mongoose.Schema(
 
     stage:        { type: String, enum: STAGES, default: 'NEW_LEAD' },
     assignedToId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    categoryId:   { type: mongoose.Schema.Types.ObjectId, ref: 'LeadCategory', default: null },
 
     // Meeting info (embedded — no separate Meeting model)
     meetingDate: { type: Date, default: null },
@@ -94,6 +95,7 @@ leadSchema.index({ stage: 1 });
 leadSchema.index({ assignedToId: 1 });
 leadSchema.index({ isArchived: 1 });
 leadSchema.index({ nextFollowUpDate: 1 });
+leadSchema.index({ categoryId: 1 });
 
 // Auto-generate leadCode on first save (same Counter pattern as Client + Employee)
 leadSchema.pre('save', async function () {
