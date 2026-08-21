@@ -13,7 +13,7 @@ const userSchema = new mongoose.Schema(
     primaryRole: {
       type: String,
       required: true,
-      enum: ['super_admin', 'admin', 'hr', 'operations_head', 'ads_manager_creators', 'employee', 'cinematographer', 'client', 'smm', 'prm', 'accountant', 'sales_executive', 'telecaller'],
+      enum: ['super_admin', 'admin', 'hr', 'operations_head', 'ads_manager_creators', 'employee', 'cinematographer', 'client', 'smm', 'prm', 'accountant', 'sales_head', 'sales_executive', 'telecaller'],
     },
     accessRoles: [{ type: String }],
     linkedEmployeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', default: null },

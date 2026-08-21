@@ -9,7 +9,7 @@ const Client          = require('../clients/client.model');
 const LeadCategory    = require('./leadCategory.model');
 const getGenericModel = require('../generic/generic.model');
 
-const ALLOWED_ROLES = ['super_admin', 'admin', 'sales_executive', 'telecaller'];
+const ALLOWED_ROLES = ['super_admin', 'admin', 'sales_head', 'sales_executive', 'telecaller'];
 
 function checkAccess(req, res) {
   const role        = req.user?.primaryRole;
@@ -25,19 +25,29 @@ function checkAccess(req, res) {
   return true;
 }
 
-/** Is this user an admin-level viewer (sees all leads)? */
+/** Is this user an admin-level viewer (sees all leads, not just own)? */
 function isAdminViewer(req) {
-  const role = req.user?.primaryRole;
-  return ['super_admin', 'admin'].includes(role);
+  const role        = req.user?.primaryRole;
+  const accessRoles = req.user?.accessRoles || [];
+  return ['super_admin', 'admin', 'sales_head'].includes(role) ||
+         accessRoles.includes('Sales Head');
+}
+
+/** Can this user assign leads to other users? */
+function canAssign(req) {
+  const role        = req.user?.primaryRole;
+  const accessRoles = req.user?.accessRoles || [];
+  return ['super_admin', 'admin', 'sales_head'].includes(role) ||
+         accessRoles.includes('Sales Head');
 }
 
 /**
  * canAccessLead — true if non-admin user is assigned to OR created the lead.
- * Admins always return true.
+ * Admins / sales_head always return true.
  */
 function canAccessLead(req, lead) {
   if (isAdminViewer(req)) return true;
-  const uid = req.user._id.toString();
+  const uid        = req.user._id.toString();
   const assignedId = lead.assignedToId?._id?.toString() || lead.assignedToId?.toString();
   const createdId  = lead.createdById?._id?.toString()  || lead.createdById?.toString();
   return assignedId === uid || createdId === uid;
@@ -231,7 +241,7 @@ exports.updateLead = async (req, res) => {
       return res.status(403).json({ message: 'Access denied — not your lead.' });
     }
 
-    // Only admins can re-assign a lead to someone else
+    // Only assigning roles can set assignedToId
     const EDITABLE = [
       'companyName', 'contactPerson', 'email', 'phone', 'source',
       'categoryId',
@@ -729,5 +739,63 @@ exports.importCSV = async (req, res) => {
   } catch (err) {
     console.error('[Sales] importCSV error:', err);
     res.status(500).json({ message: 'Import failed.' });
+  }
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BULK CATEGORY ASSIGN — Sales Head / Admin / Super Admin only
+// POST /api/sales/categories/:id/assign
+// Body: { assignedToId: "<userId>" }  (null = unassign / remove assignment)
+// ══════════════════════════════════════════════════════════════════════════════
+exports.bulkAssignCategory = async (req, res) => {
+  try {
+    if (!checkAccess(req, res)) return;
+    if (!canAssign(req)) {
+      return res.status(403).json({ message: 'Only Sales Head / Admin can assign leads.' });
+    }
+
+    const { assignedToId } = req.body;
+    const catId = req.params.id;
+
+    // Verify category exists
+    const cat = await LeadCategory.findById(catId);
+    if (!cat || cat.isArchived) {
+      return res.status(404).json({ message: 'Category not found.' });
+    }
+
+    // Bulk update all active leads in this category
+    const result = await Lead.updateMany(
+      { categoryId: new mongoose.Types.ObjectId(catId), isArchived: { $ne: true } },
+      { $set: { assignedToId: assignedToId || null } }
+    );
+
+    res.json({
+      message: `${result.modifiedCount} lead(s) in "${cat.name}" assigned successfully.`,
+      modifiedCount: result.modifiedCount,
+      categoryId: catId,
+      assignedToId: assignedToId || null,
+    });
+  } catch (err) {
+    console.error('[Sales] bulkAssignCategory error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// ── GET /api/sales/team — list telecallers + sales_executives for assign dropdown ──
+exports.getSalesTeam = async (req, res) => {
+  try {
+    if (!checkAccess(req, res)) return;
+    if (!canAssign(req)) {
+      return res.status(403).json({ message: 'Access denied.' });
+    }
+    const User = require('../users/user.model');
+    const team = await User.find({
+      primaryRole: { $in: ['sales_executive', 'telecaller', 'sales_head'] },
+      isActive: true,
+    }).select('name loginId primaryRole employeeCode');
+    res.json(team);
+  } catch (err) {
+    console.error('[Sales] getSalesTeam error:', err);
+    res.status(500).json({ message: 'Server error.' });
   }
 };

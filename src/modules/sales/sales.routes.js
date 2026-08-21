@@ -10,10 +10,15 @@ const { authenticate } = require('../../middleware/auth');
 router.use(authenticate);
 
 // ── Lead Categories ─────────────────────────────────────────────────────────
-router.get('/categories',          ctrl.getCategories);
-router.post('/categories',         ctrl.createCategory);
-router.patch('/categories/:id',    ctrl.updateCategory);
-router.delete('/categories/:id',   ctrl.deleteCategory);
+router.get('/categories',             ctrl.getCategories);
+router.post('/categories',            ctrl.createCategory);
+router.patch('/categories/:id',       ctrl.updateCategory);
+router.delete('/categories/:id',      ctrl.deleteCategory);
+// Bulk assign all leads in a category to a user (Sales Head / Admin)
+router.post('/categories/:id/assign', ctrl.bulkAssignCategory);
+
+// ── Sales Team (for assign dropdowns) ───────────────────────────────────────
+router.get('/team',                   ctrl.getSalesTeam);
 
 // ── CSV Export / Import ──────────────────────────────────────────────────────
 router.get('/export',              ctrl.exportCSV);
