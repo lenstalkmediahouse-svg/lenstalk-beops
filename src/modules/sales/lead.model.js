@@ -62,6 +62,9 @@ const leadSchema = new mongoose.Schema(
 
     nextFollowUpDate: { type: Date, default: null },
 
+    // Quick notes — visible as tooltip in lead table
+    notes: { type: String, trim: true, default: '' },
+
     // Account Clearance — required before WON (from NEGOTIATION stage)
     // Existing leads default to 'not_required' so they are grandfathered.
     accountClearance: {
