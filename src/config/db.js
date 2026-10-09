@@ -9,7 +9,7 @@ if (!uri) {
 mongoose.set('strictQuery', false);
 
 mongoose.connection.on('connected', () => {
-  console.log(`MongoDB connected to ${uri}`);
+  console.log(`MongoDB connected to ${new URL(uri).host}${new URL(uri).pathname}`);
 });
 
 mongoose.connection.on('error', (err) => {
