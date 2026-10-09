@@ -78,15 +78,19 @@ async function notifyAccountants(message) {
 
 /**
  * Internal: Auto-create a Client record when a lead is WON.
+ * Only called when prevStage !== 'WON' && !lead.clientId to prevent duplicates.
+ * NOTE: Pricing info (finalPrice, expectedPrice) is intentionally NOT passed to
+ *       the Client record — pricing is Sales-confidential and must stay in Sales only.
  */
 async function _onWon(lead, byUserId) {
   try {
     const newClient = await Client.create({
-      name:    lead.companyName,
-      pocName: lead.contactPerson || '',
+      name:      lead.companyName,
+      pocName:   lead.contactPerson || '',
       pocMobile: lead.phone || '',
-      status:  'active',
-      notes:   `Auto-created from Sales lead ${lead.leadCode}`,
+      status:    'active',
+      // No finalPrice or notes with pricing — Sales data stays in Sales
+      notes:     `Auto-created from Sales lead ${lead.leadCode}`,
     });
     lead.clientId = newClient._id;
     await writeNotification(
@@ -98,6 +102,7 @@ async function _onWon(lead, byUserId) {
     // Don't block the transition — log and continue
   }
 }
+
 
 // ── GET /api/sales ────────────────────────────────────────────────────────────
 exports.getLeads = async (req, res) => {
@@ -184,6 +189,7 @@ exports.createLead = async (req, res) => {
       categoryId,
       assignedToId, nextFollowUpDate, meetingDate,
       meetingStatus, meetingNotes, proposalAmount, proposalFileUrl, proposalStatus,
+      notes, expectedPrice, finalPrice,
     } = req.body;
 
     if (!companyName?.trim()) return res.status(400).json({ message: 'Company name is required.' });
@@ -207,6 +213,9 @@ exports.createLead = async (req, res) => {
       proposalAmount: proposalAmount || null,
       proposalFileUrl: proposalFileUrl?.trim() || '',
       proposalStatus: proposalStatus || 'NOT_SENT',
+      notes: notes?.trim() || '',
+      expectedPrice: expectedPrice || null,
+      finalPrice: finalPrice || null,
       createdById: req.user._id,
       activityLog: [{
         stage: 'NEW_LEAD',
@@ -247,6 +256,7 @@ exports.updateLead = async (req, res) => {
       'categoryId',
       'nextFollowUpDate', 'meetingDate', 'meetingStatus', 'meetingNotes',
       'proposalAmount', 'proposalFileUrl', 'proposalStatus',
+      'notes', 'expectedPrice', 'finalPrice',
     ];
     if (isAdminViewer(req)) EDITABLE.push('assignedToId');
 
@@ -266,7 +276,7 @@ exports.updateLead = async (req, res) => {
 exports.transitionStage = async (req, res) => {
   try {
     if (!checkAccess(req, res)) return;
-    const { toStage, note } = req.body;
+    const { toStage, note, meetingDate, proposalAmount, finalPrice } = req.body;
 
     if (!toStage || !STAGES.includes(toStage)) {
       return res.status(400).json({ message: `Invalid stage. Must be one of: ${STAGES.join(', ')}` });
@@ -280,15 +290,32 @@ exports.transitionStage = async (req, res) => {
       return res.status(403).json({ message: 'Access denied — not your lead.' });
     }
 
+    // Apply optional inline fields BEFORE validation so the user can supply them in the same request
+    if (meetingDate !== undefined)    lead.meetingDate    = meetingDate    || null;
+    if (proposalAmount !== undefined) lead.proposalAmount = proposalAmount || null;
+    if (finalPrice !== undefined)     lead.finalPrice     = finalPrice     || null;
+
     // Basic sanity validations (not a hard state machine — just key field checks)
     if (
       ['MEETING_FIXED', 'FOUNDER_REVIEW', 'PROPOSAL_SENT', 'NEGOTIATION', 'WON'].includes(toStage) &&
       !lead.meetingDate
     ) {
-      return res.status(400).json({ message: 'Meeting date is required before moving past TELECALLING stage.' });
+      return res.status(400).json({
+        message: 'Meeting date is required before moving to this stage.',
+        field: 'meetingDate',
+      });
     }
     if (['PROPOSAL_SENT', 'NEGOTIATION', 'WON'].includes(toStage) && !lead.proposalAmount) {
-      return res.status(400).json({ message: 'Proposal amount is required before moving to PROPOSAL_SENT or beyond.' });
+      return res.status(400).json({
+        message: 'Proposal amount is required before moving to PROPOSAL_SENT or beyond.',
+        field: 'proposalAmount',
+      });
+    }
+    if (toStage === 'WON' && !lead.finalPrice) {
+      return res.status(400).json({
+        message: 'Final price is required to mark a lead as WON.',
+        field: 'finalPrice',
+      });
     }
 
     const prevStage = lead.stage;
@@ -328,7 +355,11 @@ exports.transitionStage = async (req, res) => {
           message: `Account clearance was rejected: "${lead.accountClearance?.note || 'No reason given'}". Please resolve with the Accounts team first.`,
         });
       }
-      await _onWon(lead, req.user._id);
+      // Only auto-create client on first WON transition — prevent duplicate clients
+      if (prevStage !== 'WON' && !lead.clientId) {
+        await lead.save(); // save first so clientId is set on the persisted doc
+        await _onWon(lead, req.user._id);
+      }
     }
 
     // LOST: soft-archive
@@ -602,20 +633,25 @@ exports.exportCSV = async (req, res) => {
 
     const esc = (v) => {
       const s = v == null ? '' : String(v);
-      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-        return `"${s.replace(/"/g, '""')}"`;
+      // Guard against CSV injection
+      const safe = /^[=+\-@]/.test(s) ? `'${s}` : s;
+      if (safe.includes(',') || safe.includes('"') || safe.includes('\n')) {
+        return `"${safe.replace(/"/g, '""')}"`;
       }
-      return s;
+      return safe;
     };
     const fmt = (d) => d ? new Date(d).toLocaleDateString('en-IN') : '';
 
     const header = ['Lead Code','Company Name','Contact Person','Email','Phone','Source',
-                    'Stage','Category','Assigned To','Proposal Amount','Follow-up Date','Created At'];
+                    'Stage','Category','Assigned To',
+                    'Expected Price','Proposal Amount','Final Price',
+                    'Notes','Follow-up Date','Created At'];
 
     const rows = leads.map(l => [
       l.leadCode, l.companyName, l.contactPerson, l.email, l.phone, l.source,
       l.stage, l.categoryId?.name || '', l.assignedToId?.name || '',
-      l.proposalAmount || '', fmt(l.nextFollowUpDate), fmt(l.createdAt),
+      l.expectedPrice || '', l.proposalAmount || '', l.finalPrice || '',
+      l.notes || '', fmt(l.nextFollowUpDate), fmt(l.createdAt),
     ].map(esc).join(','));
 
     const csv = [header.join(','), ...rows].join('\r\n');
@@ -675,6 +711,9 @@ exports.importCSV = async (req, res) => {
     const colSource      = getIdx('source');
     const colStage       = getIdx('stage');
     const colProposal    = getIdx('proposalamount', 'amount');
+    const colExpected    = getIdx('expectedprice', 'expected');
+    const colFinalPrice  = getIdx('finalprice', 'final');
+    const colNotes       = getIdx('notes', 'note');
     const colFollowup    = getIdx('follow-update', 'followupdate', 'nextfollowup');
 
     if (colCompany === -1 || colPhone === -1) {
@@ -721,7 +760,10 @@ exports.importCSV = async (req, res) => {
         email:         colEmail    !== -1 ? row[colEmail]     : undefined,
         source,
         stage,
-        proposalAmount: colProposal !== -1 && row[colProposal] ? Number(row[colProposal]) || null : null,
+        proposalAmount: colProposal  !== -1 && row[colProposal]  ? Number(row[colProposal])  || null : null,
+        expectedPrice:  colExpected  !== -1 && row[colExpected]  ? Number(row[colExpected])  || null : null,
+        finalPrice:     colFinalPrice !== -1 && row[colFinalPrice] ? Number(row[colFinalPrice]) || null : null,
+        notes:          colNotes !== -1 ? (row[colNotes]?.trim() || '') : '',
         nextFollowUpDate: colFollowup !== -1 && row[colFollowup] ? new Date(row[colFollowup]) : null,
         createdById: req.user._id,
       };

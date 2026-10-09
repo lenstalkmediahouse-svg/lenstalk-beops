@@ -60,6 +60,10 @@ const leadSchema = new mongoose.Schema(
       default: 'NOT_SENT',
     },
 
+    // Price tracking (F2 + F3)
+    expectedPrice: { type: Number, default: null },
+    finalPrice:    { type: Number, default: null },
+
     nextFollowUpDate: { type: Date, default: null },
 
     // Quick notes — visible as tooltip in lead table

@@ -40,6 +40,15 @@ const clientSchema = new mongoose.Schema(
     isArchived:   { type: Boolean, default: false },
     archivedAt:   { type: Date, default: null },
     notes:        { type: String, trim: true },
+    // C: projectType replaces clientType as free-text field
+    projectType:  { type: String, trim: true, default: '' },
+    // kept for backward-compat (older records may still have this)
+    clientType:   { type: String, trim: true, default: '' },
+    // C: status history for Content Planner month-visibility logic
+    statusHistory: [{
+      status:    { type: String },
+      changedAt: { type: Date, default: Date.now },
+    }],
   },
   { timestamps: true }
 );

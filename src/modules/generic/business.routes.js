@@ -37,6 +37,64 @@ router.post('/content-tasks', authenticate, async (req, res) => {
   } catch (err) { res.status(400).json({ message: err.message }); }
 });
 
+// D2: Bulk create — POST /api/content-tasks/bulk
+// Body: { tasks: [...], clientId?, client? }
+// Returns: { created, skipped, errors }
+router.post('/content-tasks/bulk', authenticate, async (req, res) => {
+  try {
+    const Model = getContentTasksModel();
+    const rows = Array.isArray(req.body.tasks) ? req.body.tasks : [];
+    if (rows.length === 0) return res.status(400).json({ message: 'No tasks provided.' });
+    if (rows.length > 500) return res.status(400).json({ message: 'Maximum 500 rows per import.' });
+
+    // Load existing for dedup (same client + title + deadline)
+    const clientName = req.body.client || rows[0]?.client || '';
+    const existing = await Model.find({ client: clientName, isArchived: { $ne: true } }).lean();
+    const existingKeys = new Set(existing.map(d =>
+      `${(d.client || '').toLowerCase()}|${(d.title || '').toLowerCase()}|${(d.deadline || '').slice(0, 10)}`
+    ));
+
+    const toInsert = [];
+    const skippedRows = [];
+    const errors = [];
+
+    rows.forEach((row, idx) => {
+      const key = `${(row.client || '').toLowerCase()}|${(row.title || '').toLowerCase()}|${(row.deadline || '').slice(0, 10)}`;
+      if (existingKeys.has(key)) {
+        skippedRows.push({ row: idx + 1, reason: 'Duplicate (same client, title, deadline)' });
+        return;
+      }
+      // CSV-injection guard
+      const sanitize = v => typeof v === 'string' && /^[=+\-@]/.test(v) ? `'${v}` : v;
+      toInsert.push({
+        ...row,
+        title: sanitize(row.title),
+        notes: sanitize(row.notes),
+        workflowStatus: row.workflowStatus || 'planned',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      existingKeys.add(key); // prevent within-batch dups too
+    });
+
+    let inserted = [];
+    if (toInsert.length > 0) {
+      const result = await Model.insertMany(toInsert, { ordered: false });
+      inserted = result;
+    }
+
+    res.status(201).json({
+      created: inserted.length,
+      skipped: skippedRows.length,
+      errors,
+      skippedDetails: skippedRows,
+    });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+
 router.patch('/content-tasks/:id', authenticate, async (req, res) => {
   try {
     const Model = getContentTasksModel();

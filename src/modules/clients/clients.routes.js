@@ -149,8 +149,25 @@ router.get('/:id', async (req, res) => {
 router.patch('/:id', restrictTo('super_admin', 'admin', 'operations_head', 'hr'), async (req, res) => {
   try {
     const { clientName, name, ...rest } = req.body;
+
+    // C: Whitelist — prevent overwriting protected fields
+    const PROTECTED = ['_id', 'clientCode', 'userId', 'isArchived', 'archivedAt'];
+    PROTECTED.forEach(f => delete rest[f]);
+
     const updates = { ...rest };
     if (clientName || name) updates.name = clientName || name;
+
+    // C: projectType → also mirror to clientType for backward compat
+    if (rest.projectType !== undefined) {
+      updates.projectType = rest.projectType || '';
+      updates.clientType  = rest.projectType || '';
+    }
+
+    // C: push to statusHistory when status changes
+    const existing = await Client.findById(req.params.id).select('status');
+    if (existing && updates.status && updates.status !== existing.status) {
+      updates.$push = { statusHistory: { status: updates.status, changedAt: new Date() } };
+    }
 
     const doc = await Client.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
     if (!doc) return res.status(404).json({ message: 'Client not found.' });
@@ -159,6 +176,7 @@ router.patch('/:id', restrictTo('super_admin', 'admin', 'operations_head', 'hr')
     res.status(400).json({ message: err.message });
   }
 });
+
 
 // ── POST /api/clients/:id/archive ─────────────────────────────────────────────
 // Soft-archives the client and deactivates their login

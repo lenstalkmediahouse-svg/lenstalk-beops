@@ -11,7 +11,7 @@ module.exports = {
   mongoFallbackUri: process.env.MONGO_FALLBACK_URI || 'mongodb://localhost:27017/lenstalk-os',
   databaseUrl: process.env.DATABASE_URL,
   jwtSecret: process.env.JWT_SECRET || (isProduction ? undefined : 'LenstalkDemoJwtSecret2026ChangeMe'),
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '30d',
   nodeEnv: process.env.NODE_ENV || 'development',
   // Accepts either APP_URL or FRONTEND_URL — both are supported
   frontendUrl: process.env.FRONTEND_URL || process.env.APP_URL || 'https://lenstalk-ops.vercel.app',
